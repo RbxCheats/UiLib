@@ -163,10 +163,8 @@ function RbxImGui.new(title, parent)
 		BorderSizePixel  = 0,
 		Parent           = self._window,
 	})
-	-- Top corners match the window, bottom is flat (flush with tab bar)
-	local tc = Instance.new("UICorner")
-	tc.CornerRadius = UDim.new(0, DEFAULTS.CornerRadius)
-	tc.Parent = titleBar
+	-- No UICorner on title bar — the window Frame already has rounded corners.
+	-- Adding a corner here creates a visible gap at the bottom of the title bar.
 
 	make("TextLabel", {
 		Name                  = "Title",
@@ -226,10 +224,11 @@ function RbxImGui.new(title, parent)
 	tabLayout.Parent         = self._tabBar
 
 	local tabPad = Instance.new("UIPadding")
-	tabPad.PaddingLeft  = UDim.new(0, 4)
-	tabPad.PaddingRight = UDim.new(0, 4)
-	tabPad.PaddingTop   = UDim.new(0, 4)
-	tabPad.Parent       = self._tabBar
+	tabPad.PaddingLeft   = UDim.new(0, 4)
+	tabPad.PaddingRight  = UDim.new(0, 4)
+	tabPad.PaddingTop    = UDim.new(0, 3)
+	tabPad.PaddingBottom = UDim.new(0, 3)
+	tabPad.Parent        = self._tabBar
 
 	self._tabLayout = tabLayout
 
@@ -310,7 +309,7 @@ function RbxImGui:AddTab(name)
 	-- Tab button in the tab bar
 	local btn = make("TextButton", {
 		Name             = "Tab_" .. name,
-		Size             = UDim2.new(0, math.max(DEFAULTS.TabMinWidth, #name * 8 + 20), 1, -4),
+		Size             = UDim2.new(0, math.max(DEFAULTS.TabMinWidth, #name * 8 + 20), 1, 0),
 		BackgroundColor3 = THEME.TabBg,
 		Text             = name,
 		TextColor3       = THEME.TabText,
