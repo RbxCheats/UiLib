@@ -6,7 +6,7 @@ A lightweight, ImGui-style UI library for Roblox. Create draggable, resizable wi
 
 ---
 ![Image #1](https://i.imgur.com/hZnUQCI.png)
-![Image #2](https://i.imgur.com/a/6SpKdNO.png)
+![Image #2](https://i.imgur.com/y3XBbzc.png)
 ---
 
 ## Table of Contents
