@@ -121,7 +121,8 @@ function RbxImGui.new(title, parent)
 	local self = setmetatable({}, RbxImGui)
 
 	self._title      = title or "Window"
-	self._tabs       = {}       -- { name, items[], scrollFrame, tabBtn }
+	self._tabs       = {}       -- ordered array of tabData objects
+	self._tabsByName = {}       -- name -> tabData lookup (separate from array)
 	self._activeTab  = nil
 	self._rendered   = false
 
@@ -353,8 +354,8 @@ function RbxImGui:AddTab(name)
 		scrollFrame = sf,
 		tabBtn      = btn,
 	}
-	self._tabs[tabIndex] = tabData
-	self._tabs[name]     = tabData  -- also index by name for win:Tab("Name")
+	self._tabs[tabIndex]   = tabData   -- ordered array entry
+	self._tabsByName[name] = tabData   -- name lookup
 
 	-- Click handler — switch to this tab
 	btn.MouseButton1Click:Connect(function()
@@ -382,24 +383,22 @@ end
 -- Internal: switch the visible tab
 function RbxImGui:_switchTab(name)
 	self._activeTab = name
-	for _, td in pairs(self._tabs) do
-		if type(td) == "table" then
-			local isActive = (td.name == name)
-			td.scrollFrame.Visible = isActive
-			tween(td.tabBtn, {
-				BackgroundColor3 = isActive and THEME.TabActive or THEME.TabBg,
-				TextColor3       = isActive and THEME.TabTextActive or THEME.TabText,
-			})
-		end
+	for _, td in ipairs(self._tabs) do
+		local isActive = (td.name == name)
+		td.scrollFrame.Visible = isActive
+		tween(td.tabBtn, {
+			BackgroundColor3 = isActive and THEME.TabActive or THEME.TabBg,
+			TextColor3       = isActive and THEME.TabTextActive or THEME.TabText,
+		})
 	end
 end
 
 -- Returns a TabBuilder scoped to the named tab.
 -- win:Tab("Aimbot"):Button("Fire", cb)
 function RbxImGui:Tab(name)
-	assert(self._tabs[name], "Tab '" .. tostring(name) .. "' does not exist. Call :AddTab() first.")
+	assert(self._tabsByName[name], "Tab '" .. tostring(name) .. "' does not exist. Call :AddTab() first.")
 	local builder  = setmetatable({}, TabBuilder)
-	builder._tabData = self._tabs[name]
+	builder._tabData = self._tabsByName[name]
 	return builder
 end
 
@@ -627,16 +626,16 @@ function TabBuilder:Slider(l,mn,mx,d,cb) addSlider(self._tabData, l, mn, mx, d, 
 -- ── RbxImGui proxy methods (single-tab / no-tab usage) ────────
 -- These add widgets to a hidden default tab called "__default"
 local function ensureDefault(self)
-	if not self._tabs["__default"] then
+	if not self._tabsByName["__default"] then
 		self:AddTab("__default")
 		-- hide the tab button since it's a single-tab window
-		self._tabs["__default"].tabBtn.Visible = false
+		self._tabsByName["__default"].tabBtn.Visible = false
 		self._tabBar.Visible = false
 		-- shift content area up since there's no tab bar
 		self._contentArea.Position = UDim2.new(0, 0, 0, DEFAULTS.TitleBarHeight)
 		self._contentArea.Size     = UDim2.new(1, 0, 1, -(DEFAULTS.TitleBarHeight + DEFAULTS.ResizeGripSize))
 	end
-	return self._tabs["__default"]
+	return self._tabsByName["__default"]
 end
 
 function RbxImGui:Label(text)          addLabel(ensureDefault(self), text);                   return self end
@@ -647,11 +646,9 @@ function RbxImGui:Slider(l,mn,mx,d,cb) addSlider(ensureDefault(self), l, mn, mx,
 
 -- ── Render ────────────────────────────────────────────────────
 function RbxImGui:Render()
-	for _, td in pairs(self._tabs) do
-		if type(td) == "table" then
-			for i, builder in ipairs(td.items) do
-				builder(td.scrollFrame, i)
-			end
+	for _, td in ipairs(self._tabs) do
+		for i, builder in ipairs(td.items) do
+			builder(td.scrollFrame, i)
 		end
 	end
 	self._rendered = true
