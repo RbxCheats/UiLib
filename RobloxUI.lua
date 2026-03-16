@@ -30,11 +30,11 @@ local THEME = {
 	TitleBarBg        = Color3.fromRGB(20, 20, 26),
 	TitleBarText      = Color3.fromRGB(220, 220, 220),
 
-	TabBarBg          = Color3.fromRGB(26, 26, 34),
-	TabBg             = Color3.fromRGB(32, 32, 42),
-	TabHover          = Color3.fromRGB(45, 45, 60),
+	TabBarBg          = Color3.fromRGB(18, 18, 24),
+	TabBg             = Color3.fromRGB(38, 38, 52),
+	TabHover          = Color3.fromRGB(55, 55, 75),
 	TabActive         = Color3.fromRGB(82, 130, 255),
-	TabText           = Color3.fromRGB(160, 160, 180),
+	TabText           = Color3.fromRGB(170, 170, 195),
 	TabTextActive     = Color3.fromRGB(255, 255, 255),
 
 	WindowBg          = Color3.fromRGB(22, 22, 28),
@@ -208,7 +208,7 @@ function RbxImGui.new(title, parent)
 		BorderSizePixel  = 0,
 		Parent           = self._window,
 	})
-	-- thin separator line under tab bar
+	-- separator line at the very bottom of the tab bar (sibling, not in layout)
 	make("Frame", {
 		Name             = "TabSep",
 		Size             = UDim2.new(1, 0, 0, 1),
@@ -217,19 +217,27 @@ function RbxImGui.new(title, parent)
 		BorderSizePixel  = 0,
 		Parent           = self._tabBar,
 	})
+	-- inner frame receives the UIListLayout so TabSep is never counted
+	local tabInner = make("Frame", {
+		Name             = "TabInner",
+		Size             = UDim2.new(1, 0, 1, -1), -- leave 1px for sep
+		BackgroundTransparency = 1,
+		BorderSizePixel  = 0,
+		Parent           = self._tabBar,
+	})
 	local tabLayout = Instance.new("UIListLayout")
 	tabLayout.FillDirection  = Enum.FillDirection.Horizontal
 	tabLayout.SortOrder      = Enum.SortOrder.LayoutOrder
-	tabLayout.Padding        = UDim.new(0, 1)
-	tabLayout.Parent         = self._tabBar
+	tabLayout.Padding        = UDim.new(0, 4)
+	tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	tabLayout.Parent         = tabInner
 
 	local tabPad = Instance.new("UIPadding")
-	tabPad.PaddingLeft   = UDim.new(0, 4)
-	tabPad.PaddingRight  = UDim.new(0, 4)
-	tabPad.PaddingTop    = UDim.new(0, 3)
-	tabPad.PaddingBottom = UDim.new(0, 3)
-	tabPad.Parent        = self._tabBar
+	tabPad.PaddingLeft  = UDim.new(0, 6)
+	tabPad.PaddingRight = UDim.new(0, 6)
+	tabPad.Parent       = tabInner
 
+	self._tabInner = tabInner
 	self._tabLayout = tabLayout
 
 	-- ── Content Area ──────────────────────────────────────────
@@ -309,7 +317,7 @@ function RbxImGui:AddTab(name)
 	-- Tab button in the tab bar
 	local btn = make("TextButton", {
 		Name             = "Tab_" .. name,
-		Size             = UDim2.new(0, math.max(DEFAULTS.TabMinWidth, #name * 8 + 20), 1, 0),
+		Size             = UDim2.new(0, math.max(DEFAULTS.TabMinWidth, #name * 8 + 20), 0, 22),
 		BackgroundColor3 = THEME.TabBg,
 		Text             = name,
 		TextColor3       = THEME.TabText,
@@ -317,7 +325,7 @@ function RbxImGui:AddTab(name)
 		FontFace         = FONT_SEMI,
 		BorderSizePixel  = 0,
 		LayoutOrder      = tabIndex,
-		Parent           = self._tabBar,
+		Parent           = self._tabInner,
 	})
 	corner(4, btn)
 
