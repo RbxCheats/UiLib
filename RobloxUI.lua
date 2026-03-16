@@ -107,7 +107,7 @@ end
 
 -- ── Constructor ───────────────────────────────────────────────
 --  parent: ScreenGui or Frame to parent the window to.
---  If nil, tries to parent to PlayerGui automatically.
+--  If nil, parents to CoreGui (falls back to PlayerGui in Studio).
 function RbxImGui.new(title, parent)
 	local self = setmetatable({}, RbxImGui)
 
@@ -116,18 +116,27 @@ function RbxImGui.new(title, parent)
 	self._widgets  = {}        -- live widget frames for state reads
 	self._rendered = false
 
-	-- resolve parent
+	-- resolve parent — prefer CoreGui so the window survives death/respawn
+	-- and sits above all in-game UI. Falls back to PlayerGui if CoreGui
+	-- is not accessible (e.g. running in Studio without plugin permissions).
 	if not parent then
-		local Players = game:GetService("Players")
-		local lp = Players.LocalPlayer
-		if lp then
-			local sg = Instance.new("ScreenGui")
-			sg.Name            = "RbxImGui_" .. self._title
-			sg.ResetOnSpawn    = false
-			sg.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
-			sg.Parent          = lp:WaitForChild("PlayerGui")
-			parent             = sg
+		local sg = Instance.new("ScreenGui")
+		sg.Name           = "RbxImGui_" .. self._title
+		sg.ResetOnSpawn   = false
+		sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		sg.DisplayOrder   = 999  -- render on top of everything
+
+		local ok = pcall(function()
+			sg.Parent = game:GetService("CoreGui")
+		end)
+
+		if not ok then
+			-- CoreGui blocked (Studio without plugin perms) — use PlayerGui
+			local lp = game:GetService("Players").LocalPlayer
+			sg.Parent = lp:WaitForChild("PlayerGui")
 		end
+
+		parent = sg
 	end
 	self._screenGui = parent
 
