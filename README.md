@@ -1,6 +1,6 @@
 # RbxImGui
 
-A lightweight, ImGui-style immediate-mode UI library for Roblox. Create draggable, resizable debug/cheat windows with buttons, toggles, sliders, and labels — all in a few lines of Lua. Renders into `CoreGui` so it survives respawns and sits above all in-game UI.
+A lightweight, ImGui-style UI library for Roblox. Create draggable, resizable windows with a **tabbed navigation bar** — Aimbot, Visuals, Misc, or any tabs you want — plus buttons, toggles, sliders, and labels. Renders into `CoreGui` so it survives respawns and sits above all in-game UI.
 
 > **Toggle visibility:** Press `Insert` at any time to show or hide the window.
 
@@ -12,24 +12,24 @@ A lightweight, ImGui-style immediate-mode UI library for Roblox. Create draggabl
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
-- [API Reference](#api-reference)
+- [Tab System](#tab-system)
+  - [win:AddTab()](#winaddtab)
+  - [win:Tab()](#wintab)
+  - [Single-window (no tabs)](#single-window-no-tabs)
+- [Widget API](#widget-api)
+  - [:Label()](#label)
+  - [:Separator()](#separator)
+  - [:Button()](#button)
+  - [:Toggle()](#toggle)
+  - [:Slider()](#slider)
+- [Window API](#window-api)
   - [RbxImGui.new()](#rbximguinew)
-  - [win:Label()](#winlabel)
-  - [win:Separator()](#winseparator)
-  - [win:Button()](#winbutton)
-  - [win:Toggle()](#wintoggle)
-  - [win:Slider()](#winslider)
   - [win:Render()](#winrender)
   - [win:Show() / win:Hide()](#winshow--winhide)
   - [win:Toggle_Window()](#wintoggle_window)
   - [win:Destroy()](#windestroy)
 - [Showcase Example](#showcase-example)
 - [Feature Deep Dive & Possibilities](#feature-deep-dive--possibilities)
-  - [Label Possibilities](#label-possibilities)
-  - [Separator Possibilities](#separator-possibilities)
-  - [Button Possibilities](#button-possibilities)
-  - [Toggle Possibilities](#toggle-possibilities)
-  - [Slider Possibilities](#slider-possibilities)
 - [Theming](#theming)
 - [Defaults](#defaults)
 - [Rules & Gotchas](#rules--gotchas)
@@ -39,63 +39,58 @@ A lightweight, ImGui-style immediate-mode UI library for Roblox. Create draggabl
 
 ## What It Looks Like
 
-Below is a visual map of the default window and every widget type, produced by the showcase code later in this README.
+```
+┌──────────────────────────────────┐
+│  Player Mods                     │  ← Title bar (drag to move)
+├──────────────────────────────────┤
+│ [Aimbot] [Visuals] [Misc]        │  ← Tab bar (click to switch)
+├──────────────────────────────────┤
+│                                  │
+│  Movement                        │  ← Label
+│ ─────────────────────────────    │  ← Separator
+│  Walk Speed               16     │  ← Slider
+│  [████●────────────────────]     │
+│  Jump Power               50     │
+│  [══════════●──────────────]     │
+│                                  │
+│  Toggles                         │
+│ ─────────────────────────────    │
+│  Noclip            [ ●   ]       │  ← Toggle OFF
+│  God Mode          [   ● ]       │  ← Toggle ON
+│                                  │
+│ [ Reset Character              ] │  ← Button
+│                                  │
+└──────────────────────────────[◢] ┘  ← Resize grip
+```
 
-```
-┌─────────────────────────────────┐
-│▌ Player Mods                    │  ← Title bar (draggable)
-├─────────────────────────────────┤
-│  Movement                       │  ← Label
-│ ──────────────────────────────  │  ← Separator
-│  Walk Speed              16     │  ← Slider (label left, value right)
-│  [████●──────────────────]      │    filled track + knob
-│  Jump Power              50     │
-│  [══════════●────────────]      │
-│  FOV                     70     │
-│  [═════════════════●─────]      │
-│                                 │
-│  Toggles                        │  ← Label
-│ ──────────────────────────────  │  ← Separator
-│  Noclip            [ ●   ]      │  ← Toggle OFF (grey track, knob left)
-│  God Mode          [   ● ]      │  ← Toggle ON  (blue track, knob right)
-│  Infinite Jump     [ ●   ]      │
-│                                 │
-│  Actions                        │  ← Label
-│ ──────────────────────────────  │  ← Separator
-│ [ Reset Character             ] │  ← Button (full width)
-│ [ Teleport to Spawn           ] │
-│ [ Print Player Info           ] │
-│                                 │
-└─────────────────────────────[◢] ┘  ← Resize grip (drag to resize)
-```
+The **active tab button turns blue**. Inactive tabs are dark grey. Clicking a tab instantly swaps the content area — each tab has its own independent scroll position.
 
 The window is:
-- **Draggable** — click and hold the title bar to move it anywhere on screen
-- **Resizable** — drag the grip in the bottom-right corner to any size
-- **Scrollable** — if content overflows the window height a scrollbar appears
-- **Togglable** — press `Insert` to show or hide it at any time
+- **Draggable** — click and hold the title bar
+- **Resizable** — drag the bottom-right grip
+- **Scrollable** — each tab scrolls independently if content overflows
+- **Togglable** — press `Insert` to show/hide
 
 ---
 
 ## Installation
 
-**Option A — ModuleScript (recommended for Studio projects)**
+**Option A — ModuleScript (recommended)**
 
-1. In Roblox Studio, create a `ModuleScript` inside `ReplicatedStorage`
-2. Name it `RobloxUI`
-3. Paste the full contents of `RobloxUI.lua` into it
-4. Require it from a `LocalScript` under `StarterPlayer > StarterPlayerScripts`
+1. Create a `ModuleScript` in `ReplicatedStorage`, name it `RobloxUI`
+2. Paste `RobloxUI.lua` into it
+3. Require it from a `LocalScript` under `StarterPlayer > StarterPlayerScripts`
 
 ```
 ReplicatedStorage
-  └── RobloxUI              ← ModuleScript, paste the library here
+  └── RobloxUI              ← ModuleScript
 
 StarterPlayer
   └── StarterPlayerScripts
-        └── MyScript        ← LocalScript, your code goes here
+        └── MyScript        ← LocalScript
 ```
 
-**Option B — loadstring from GitHub (no Studio setup needed)**
+**Option B — loadstring from GitHub**
 
 ```lua
 local RbxImGui = loadstring(game:HttpGet(
@@ -103,7 +98,7 @@ local RbxImGui = loadstring(game:HttpGet(
 ))()
 ```
 
-> Requires **Allow HTTP Requests** enabled in Game Settings → Security.
+> Requires **Allow HTTP Requests** in Game Settings → Security.
 
 ---
 
@@ -112,92 +107,145 @@ local RbxImGui = loadstring(game:HttpGet(
 ```lua
 local RbxImGui = require(game.ReplicatedStorage.RobloxUI)
 
-local win = RbxImGui.new("My Panel")
+local win = RbxImGui.new("Player Mods")
 
-win:Label("Settings")
-win:Separator()
-win:Button("Reset Character", function()
+-- Register tabs first
+win:AddTab("Aimbot")
+win:AddTab("Visuals")
+win:AddTab("Misc")
+
+-- Add widgets to each tab using win:Tab("Name"):WidgetMethod(...)
+win:Tab("Aimbot"):Toggle("Silent Aim", false, function(on)
+    print("Silent Aim:", on)
+end)
+
+win:Tab("Visuals"):Slider("FOV", 30, 120, 70, function(v)
+    workspace.CurrentCamera.FieldOfView = v
+end)
+
+win:Tab("Misc"):Button("Reset Character", function()
     game.Players.LocalPlayer.Character:BreakJoints()
-end)
-win:Toggle("Noclip", false, function(enabled)
-    print("Noclip:", enabled)
-end)
-win:Slider("Walk Speed", 0, 100, 16, function(value)
-    local char = game.Players.LocalPlayer.Character
-    if char then
-        char:FindFirstChildOfClass("Humanoid").WalkSpeed = value
-    end
 end)
 
 win:Render()
 ```
 
-Press **Insert** to toggle the window on and off.
-
 ---
 
 ## How It Works
 
-RbxImGui uses a **deferred build pattern**. Calling widget methods like `:Button()` or `:Slider()` does not immediately create any UI — it queues a builder function. When you call `:Render()`, all queued builders run in order and create the actual Roblox Instances.
+RbxImGui uses a **deferred build pattern**:
 
 ```
-RbxImGui.new()   →  creates the window shell immediately
-:Button()        →  queues a builder  (no UI yet)
-:Toggle()        →  queues a builder  (no UI yet)
-:Slider()        →  queues a builder  (no UI yet)
-:Render()        →  runs all builders, creates all widgets NOW
+RbxImGui.new()      → creates window shell + tab bar immediately
+:AddTab("Name")     → registers a tab and its scroll frame
+:Tab("Name"):...    → queues widget builders into that tab
+:Render()           → runs all builders across all tabs at once
 ```
 
-**This means:**
-- All widget calls must come **before** `:Render()`
-- `:Render()` must be called **exactly once**
-- You cannot add new widgets after `:Render()` has been called
+Widgets are not created until `:Render()` is called. After `:Render()`, you cannot add new widgets.
 
-**Method chaining** is supported — every widget method returns `self`:
+**Method chaining** is supported on both the window and on tab builders:
 
 ```lua
-win:Label("hello"):Separator():Button("go", cb):Render()
+-- Chain AddTab calls
+win:AddTab("A"):AddTab("B"):AddTab("C")
+
+-- Chain widgets on a tab
+win:Tab("A"):Label("hello"):Separator():Button("go", cb)
+
+-- Full chain including Render
+win:AddTab("A"):AddTab("B")
+win:Tab("A"):Toggle("X", false, cb):Slider("Y", 0, 100, 50, cb)
+win:Tab("B"):Button("Z", cb)
+win:Render()
 ```
 
-**CoreGui parenting** — the ScreenGui is placed in `CoreGui` automatically:
-- Renders above all in-game UI (health bars, backpack, leaderboard, etc.)
-- Survives death and respawn with no extra setup
-- Falls back silently to `PlayerGui` when running inside Studio without plugin permissions
+---
+
+## Tab System
 
 ---
 
-## API Reference
+### `win:AddTab(name)`
 
----
+Registers a new tab. Creates a tab button in the tab bar and a dedicated `ScrollingFrame` for that tab's content. The first tab added is automatically set as active.
 
-### `RbxImGui.new(title, parent?)`
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | The tab label shown in the tab bar. Also used as the key for `win:Tab()`. |
 
-Creates a new window and returns a window object. This is the only call made on the library itself — all other methods are called on the returned object.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `title` | `string` | Yes | Text shown in the title bar. Also names the ScreenGui `RbxImGui_<title>`. |
-| `parent` | `Instance` | No | Override the ScreenGui parent. Leave `nil` to use CoreGui automatically. |
-
-**Returns:** window object
-
-**Creates automatically:**
-- `ScreenGui` in `CoreGui` (fallback: `PlayerGui`), `DisplayOrder = 999`
-- Draggable `Frame` at position `(80, 80)`, default size `300×300`
-- Title bar with a blue left-edge accent stripe and bold title text
-- `ScrollingFrame` content area with auto-expanding canvas
-- Resize grip in the bottom-right corner
-- `Insert` key listener that respects `gameProcessed`
+**Returns:** `self` (the window) for chaining
 
 ```lua
-local win = RbxImGui.new("Debug Panel")
+win:AddTab("Aimbot")
+win:AddTab("Visuals")
+win:AddTab("Misc")
+win:AddTab("Player")
+win:AddTab("World")
+```
+
+Tab button widths auto-size based on the length of the name (minimum 60px). There is no hard limit on the number of tabs — if there are too many to fit, consider shortening names.
+
+---
+
+### `win:Tab(name)`
+
+Returns a **TabBuilder** scoped to the named tab. All widget methods (`:Label()`, `:Button()`, etc.) are called on this object to add widgets to that specific tab.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | Must match a name previously passed to `:AddTab()`. Throws an error if the tab doesn't exist. |
+
+**Returns:** TabBuilder object
+
+```lua
+-- All three of these are equivalent patterns:
+
+-- Pattern 1: separate lines
+win:Tab("Aimbot"):Toggle("Silent Aim", false, cb)
+win:Tab("Aimbot"):Slider("FOV", 30, 120, 70, cb)
+
+-- Pattern 2: chain on the tab builder
+win:Tab("Aimbot")
+    :Toggle("Silent Aim", false, cb)
+    :Slider("FOV", 30, 120, 70, cb)
+    :Button("Reset", cb)
+
+-- Pattern 3: store the tab builder
+local aimTab = win:Tab("Aimbot")
+aimTab:Toggle("Silent Aim", false, cb)
+aimTab:Slider("FOV", 30, 120, 70, cb)
 ```
 
 ---
 
-### `win:Label(text)`
+### Single-window (no tabs)
 
-Adds a static, non-interactive text label.
+If you never call `:AddTab()`, the library works exactly like the old single-panel mode. You can call widget methods directly on the window object. The tab bar is automatically hidden.
+
+```lua
+local win = RbxImGui.new("Simple Panel")
+
+win:Label("Controls")
+win:Button("Click Me", function() end)
+win:Toggle("Enable", false, function(v) end)
+win:Slider("Speed", 0, 100, 16, function(v) end)
+
+win:Render()
+```
+
+---
+
+## Widget API
+
+All widget methods work identically whether called on `win:Tab("Name")` or directly on `win` (no-tab mode).
+
+---
+
+### `:Label(text)`
+
+Adds a static text label.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -206,48 +254,38 @@ Adds a static, non-interactive text label.
 **Height:** 20px
 
 ```lua
-win:Label("Movement Settings")
+win:Tab("Misc"):Label("Version 1.0")
 ```
 
 ---
 
-### `win:Separator()`
+### `:Separator()`
 
-Adds a 1px horizontal rule across the full content width. No parameters.
+Adds a 1px horizontal dividing line. No parameters.
 
 **Height:** 1px
 
 ```lua
-win:Label("Section A")
-win:Separator()
-win:Button("Action", cb)
+win:Tab("Aimbot"):Label("Combat"):Separator()
 ```
 
 ---
 
-### `win:Button(label, callback)`
+### `:Button(label, callback)`
 
-Adds a clickable button spanning the full content width.
+Adds a full-width clickable button.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `label` | `string` | Text shown on the button face. |
-| `callback` | `function()` | Called with no arguments on click. Can be `nil` as a placeholder. |
+| `label` | `string` | Text on the button. |
+| `callback` | `function()` | Called with no arguments on click. Can be `nil`. |
 
 **Height:** 28px
 
-**Interaction states:**
-| State | Color |
-|-------|-------|
-| Default | Dark grey `RGB(52, 52, 68)` |
-| Hover | Lighter grey `RGB(72, 72, 100)` |
-| Held | Accent blue `RGB(82, 130, 255)` |
-| Released | Returns to hover, callback fires |
-
-The callback fires on `MouseButton1Up`. If you hold and drag off the button, the callback does not fire.
+Fires on `MouseButton1Up` (release). Hover and hold states animate via TweenService.
 
 ```lua
-win:Button("Teleport to Spawn", function()
+win:Tab("Misc"):Button("Teleport Home", function()
     game.Players.LocalPlayer.Character
         :SetPrimaryPartCFrame(CFrame.new(0, 10, 0))
 end)
@@ -255,78 +293,73 @@ end)
 
 ---
 
-### `win:Toggle(label, defaultValue, callback)`
+### `:Toggle(label, defaultValue, callback)`
 
 Adds an on/off switch with an animated sliding knob.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `label` | `string` | Text shown to the left of the switch. |
-| `defaultValue` | `boolean` | Starting state. `true` = on (blue). `false` = off (grey). |
-| `callback` | `function(newValue: boolean)` | Fired every time the toggle is clicked. Receives the new boolean state. |
+| `label` | `string` | Text to the left of the switch. |
+| `defaultValue` | `boolean` | Starting state. `true` = on, `false` = off. |
+| `callback` | `function(newValue: boolean)` | Fires on every click with the new state. |
 
-**Height:** 24px | **Track:** 36×18px | **Knob:** 14×14px
-
-**Visual states:**
-| State | Track | Knob position |
-|-------|-------|---------------|
-| Off | Grey | Left side |
-| On | Blue | Right side |
-
-Both track color and knob position animate via TweenService (0.15s Quad ease-out).
+**Height:** 24px
 
 ```lua
-win:Toggle("God Mode", false, function(on)
-    local hum = game.Players.LocalPlayer.Character
-        :FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.MaxHealth = on and math.huge or 100
-        hum.Health    = hum.MaxHealth
-    end
+win:Tab("Aimbot"):Toggle("Silent Aim", false, function(on)
+    -- on = true when enabled, false when disabled
 end)
 ```
 
 ---
 
-### `win:Slider(label, min, max, default, callback)`
+### `:Slider(label, min, max, default, callback)`
 
-Adds a horizontal drag slider for selecting a number within a range.
+Adds a horizontal drag slider.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `label` | `string` | Text shown above the track on the left. |
-| `min` | `number` | Value at the far left of the track. |
-| `max` | `number` | Value at the far right of the track. |
-| `default` | `number` | Starting value. Clamped to `[min, max]` automatically. |
-| `callback` | `function(value: number)` | Fires continuously while dragging. Always a whole integer (`math.floor`). |
+| `label` | `string` | Text above the track. |
+| `min` | `number` | Left-end value. |
+| `max` | `number` | Right-end value. |
+| `default` | `number` | Starting value. Clamped to `[min, max]`. |
+| `callback` | `function(value: number)` | Fires while dragging. Always a whole integer. |
 
-**Total height:** 46px (16px label row + 30px track row)
-
-**Layout:**
-```
-Walk Speed                    16    ← label (left) + value (right, blue)
-[████████●──────────────────]       ← filled track + knob
-```
-
-The callback fires on every mouse movement while the slider is held — your logic runs in real time as the user drags.
+**Height:** 46px
 
 ```lua
-win:Slider("Walk Speed", 0, 100, 16, function(v)
-    local hum = game.Players.LocalPlayer.Character
-        :FindFirstChildOfClass("Humanoid")
-    if hum then hum.WalkSpeed = v end
+win:Tab("Visuals"):Slider("FOV", 30, 120, 70, function(v)
+    workspace.CurrentCamera.FieldOfView = v
 end)
 ```
+
+---
+
+## Window API
+
+---
+
+### `RbxImGui.new(title, parent?)`
+
+Creates the window. Returns the window object.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `title` | `string` | Yes | Title bar text. Also names the ScreenGui. |
+| `parent` | `Instance` | No | Override parent. Leave `nil` for auto CoreGui. |
+
+**Creates automatically:** ScreenGui in CoreGui (fallback: PlayerGui), draggable window frame, title bar, tab bar, content area, resize grip, Insert key listener.
 
 ---
 
 ### `win:Render()`
 
-Executes all queued widget builders and inserts them into the window. **Call exactly once, after all widget declarations.**
+Builds all widgets across all tabs. Call **once**, after all `:AddTab()` and widget declarations.
 
 ```lua
-win:Label("hello")
-win:Button("go", cb)
+win:AddTab("A"):AddTab("B")
+win:Tab("A"):Button("x", cb)
+win:Tab("B"):Toggle("y", false, cb)
 win:Render()  -- always last
 ```
 
@@ -334,10 +367,8 @@ win:Render()  -- always last
 
 ### `win:Show() / win:Hide()`
 
-Directly control window visibility.
-
 ```lua
-win:Hide()  -- start hidden, player opens with Insert
+win:Hide()  -- hidden on startup; player opens with Insert
 win:Show()  -- force visible
 ```
 
@@ -345,32 +376,23 @@ win:Show()  -- force visible
 
 ### `win:Toggle_Window()`
 
-Flip window visibility. Same as what `Insert` does.
-
-```lua
-win:Toggle_Window()
-```
+Flips visibility. Same as the Insert key.
 
 ---
 
 ### `win:Destroy()`
 
-Destroys the entire ScreenGui. Use for full cleanup when you no longer need the window.
-
-```lua
-win:Destroy()
-```
+Destroys the entire ScreenGui and all contents.
 
 ---
 
 ## Showcase Example
 
-This is the default demo window using every feature. It follows the recommended structure for a real panel. Copy it into a `LocalScript` under `StarterPlayer > StarterPlayerScripts`.
+Full demo using tabs and every widget type. Copy into a `LocalScript` under `StarterPlayer > StarterPlayerScripts`.
 
 ```lua
 -- ================================================================
---  RbxImGui Showcase — full demo using every widget type
---  LocalScript → StarterPlayer > StarterPlayerScripts
+--  RbxImGui Showcase  |  LocalScript → StarterPlayerScripts
 -- ================================================================
 local RbxImGui = require(game.ReplicatedStorage.RobloxUI)
 local Players  = game:GetService("Players")
@@ -378,65 +400,121 @@ local RS       = game:GetService("RunService")
 local UIS      = game:GetService("UserInputService")
 
 local lp = Players.LocalPlayer
-
--- Helper functions so we never error if the character isn't loaded yet
 local function getHum()
-    local char = lp.Character
-    return char and char:FindFirstChildOfClass("Humanoid")
+    local c = lp.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
 end
 local function getRoot()
-    local char = lp.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
+    local c = lp.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
--- ── State ─────────────────────────────────────────────────────────
--- Store toggle/slider values here so loops and other code can read them
+-- ── State ─────────────────────────────────────────────────────
 local state = {
+    silentAim    = false,
+    aimbot       = false,
+    esp          = false,
+    fullbright   = false,
     noclip       = false,
     godMode      = false,
     infiniteJump = false,
+    fov          = 70,
     walkSpeed    = 16,
     jumpPower    = 50,
-    fov          = 70,
+    gravity      = 196,
+    timeOfDay    = 12,
 }
 
--- ── Window ────────────────────────────────────────────────────────
+-- ── Window ────────────────────────────────────────────────────
 local win = RbxImGui.new("Player Mods")
 
--- ════════════════════════════════════════════════════════════════
---  MOVEMENT
--- ════════════════════════════════════════════════════════════════
-win:Label("Movement")
-win:Separator()
+win:AddTab("Aimbot")
+win:AddTab("Visuals")
+win:AddTab("Player")
+win:AddTab("World")
+win:AddTab("Misc")
 
-win:Slider("Walk Speed", 0, 100, state.walkSpeed, function(v)
+-- ════════════════════════════════════════════════════════════
+--  AIMBOT TAB
+-- ════════════════════════════════════════════════════════════
+local aim = win:Tab("Aimbot")
+
+aim:Label("Combat")
+aim:Separator()
+aim:Toggle("Silent Aim", false, function(on)
+    state.silentAim = on
+end)
+aim:Toggle("Aimbot", false, function(on)
+    state.aimbot = on
+end)
+
+aim:Label("Settings")
+aim:Separator()
+aim:Slider("FOV Circle", 10, 500, 120, function(v)
+    -- draw/resize your FOV circle here
+end)
+aim:Slider("Smoothness", 1, 20, 5, function(v)
+    -- lower = snappier, higher = smoother
+end)
+
+-- ════════════════════════════════════════════════════════════
+--  VISUALS TAB
+-- ════════════════════════════════════════════════════════════
+local vis = win:Tab("Visuals")
+
+vis:Label("ESP")
+vis:Separator()
+vis:Toggle("Player ESP", false, function(on)
+    state.esp = on
+end)
+vis:Toggle("Tracer Lines", false, function(on)
+    -- draw lines to all players
+end)
+vis:Toggle("Health Bars", false, function(on)
+    -- show health above players
+end)
+
+vis:Label("Camera")
+vis:Separator()
+vis:Slider("FOV", 30, 120, state.fov, function(v)
+    state.fov = v
+    workspace.CurrentCamera.FieldOfView = v
+end)
+
+vis:Label("World")
+vis:Separator()
+vis:Toggle("Fullbright", false, function(on)
+    state.fullbright = on
+    local lighting = game:GetService("Lighting")
+    lighting.Brightness   = on and 10   or 1
+    lighting.ClockTime    = on and 14   or 14
+    lighting.FogEnd       = on and 1e6  or 100000
+    lighting.GlobalShadows= not on
+end)
+
+-- ════════════════════════════════════════════════════════════
+--  PLAYER TAB
+-- ════════════════════════════════════════════════════════════
+local plr = win:Tab("Player")
+
+plr:Label("Movement")
+plr:Separator()
+plr:Slider("Walk Speed", 0, 500, state.walkSpeed, function(v)
     state.walkSpeed = v
     local hum = getHum()
     if hum then hum.WalkSpeed = v end
 end)
-
-win:Slider("Jump Power", 0, 500, state.jumpPower, function(v)
+plr:Slider("Jump Power", 0, 500, state.jumpPower, function(v)
     state.jumpPower = v
     local hum = getHum()
     if hum then hum.JumpPower = v end
 end)
 
-win:Slider("FOV", 30, 120, state.fov, function(v)
-    state.fov = v
-    local cam = workspace.CurrentCamera
-    if cam then cam.FieldOfView = v end
-end)
-
--- ════════════════════════════════════════════════════════════════
---  TOGGLES
--- ════════════════════════════════════════════════════════════════
-win:Label("Toggles")
-win:Separator()
-
-win:Toggle("Noclip", false, function(on)
+plr:Label("Abilities")
+plr:Separator()
+plr:Toggle("Noclip", false, function(on)
     state.noclip = on
     if not on then
-        -- restore collision on all character parts when turned off
         local char = lp.Character
         if char then
             for _, p in ipairs(char:GetDescendants()) do
@@ -445,8 +523,7 @@ win:Toggle("Noclip", false, function(on)
         end
     end
 end)
-
-win:Toggle("God Mode", false, function(on)
+plr:Toggle("God Mode", false, function(on)
     state.godMode = on
     local hum = getHum()
     if hum then
@@ -455,9 +532,8 @@ win:Toggle("God Mode", false, function(on)
     end
 end)
 
--- Infinite Jump uses a connection that is created/destroyed with the toggle
 local jumpConn
-win:Toggle("Infinite Jump", false, function(on)
+plr:Toggle("Infinite Jump", false, function(on)
     state.infiniteJump = on
     if on then
         jumpConn = UIS.JumpRequest:Connect(function()
@@ -469,48 +545,64 @@ win:Toggle("Infinite Jump", false, function(on)
     end
 end)
 
--- ════════════════════════════════════════════════════════════════
---  ACTIONS
--- ════════════════════════════════════════════════════════════════
-win:Label("Actions")
-win:Separator()
+-- ════════════════════════════════════════════════════════════
+--  WORLD TAB
+-- ════════════════════════════════════════════════════════════
+local wld = win:Tab("World")
 
-win:Button("Reset Character", function()
+wld:Label("Physics")
+wld:Separator()
+wld:Slider("Gravity", 0, 400, state.gravity, function(v)
+    state.gravity = v
+    workspace.Gravity = v
+end)
+
+wld:Label("Time")
+wld:Separator()
+wld:Slider("Time of Day", 0, 24, state.timeOfDay, function(v)
+    state.timeOfDay = v
+    game:GetService("Lighting").ClockTime = v
+end)
+
+-- ════════════════════════════════════════════════════════════
+--  MISC TAB
+-- ════════════════════════════════════════════════════════════
+local msc = win:Tab("Misc")
+
+msc:Label("Actions")
+msc:Separator()
+msc:Button("Reset Character", function()
     local char = lp.Character
     if char then char:BreakJoints() end
 end)
-
-win:Button("Teleport to Spawn", function()
+msc:Button("Teleport to Spawn", function()
     local root = getRoot()
     if root then root.CFrame = CFrame.new(0, 10, 0) end
 end)
-
-win:Button("Print Player Info", function()
+msc:Button("Print Player Info", function()
     local hum  = getHum()
     local root = getRoot()
     print("=== Player Info ===")
     print("Name     :", lp.Name)
     print("UserId   :", lp.UserId)
-    if hum  then
-        print("Health   :", hum.Health, "/", hum.MaxHealth)
-        print("WalkSpeed:", hum.WalkSpeed)
-        print("JumpPower:", hum.JumpPower)
-    end
-    if root then print("Position :", root.Position) end
+    if hum  then print("Health   :", hum.Health, "/", hum.MaxHealth) end
+    if root then print("Position :", tostring(root.Position)) end
     print("===================")
 end)
 
--- ════════════════════════════════════════════════════════════════
---  BUILD — must always be last
--- ════════════════════════════════════════════════════════════════
+msc:Label("Info")
+msc:Separator()
+msc:Label("Press Insert to toggle this window")
+msc:Label("Drag title bar to move")
+msc:Label("Drag bottom-right corner to resize")
+
+-- ════════════════════════════════════════════════════════════
+--  BUILD
+-- ════════════════════════════════════════════════════════════
 win:Render()
-win:Hide()  -- hidden by default; press Insert to open
+win:Hide()  -- hidden by default, Insert to open
 
--- ════════════════════════════════════════════════════════════════
---  LOOPS — run after Render, use state flags set by callbacks
--- ════════════════════════════════════════════════════════════════
-
--- Noclip: disable CanCollide every physics step while active
+-- ── Loops ─────────────────────────────────────────────────
 RS.Stepped:Connect(function()
     if state.noclip then
         local char = lp.Character
@@ -523,35 +615,6 @@ RS.Stepped:Connect(function()
 end)
 ```
 
-**What this produces:**
-
-```
-┌──────────────────────────────────┐
-│▌ Player Mods                     │
-├──────────────────────────────────┤
-│  Movement                        │
-│ ─────────────────────────────    │
-│  Walk Speed               16     │
-│  [████●────────────────────]     │
-│  Jump Power               50     │
-│  [══════════●──────────────]     │
-│  FOV                      70     │
-│  [═════════════════●───────]     │
-│                                  │
-│  Toggles                         │
-│ ─────────────────────────────    │
-│  Noclip            [ ●   ]       │
-│  God Mode          [ ●   ]       │
-│  Infinite Jump     [ ●   ]       │
-│                                  │
-│  Actions                         │
-│ ─────────────────────────────    │
-│ [ Reset Character              ] │
-│ [ Teleport to Spawn            ] │
-│ [ Print Player Info            ] │
-└──────────────────────────────[◢] ┘
-```
-
 ---
 
 ## Feature Deep Dive & Possibilities
@@ -560,124 +623,65 @@ end)
 
 ### Label Possibilities
 
-Labels display any static string. The text is set at build time and cannot be changed after `:Render()`.
+Static text. Set at build time, cannot be changed after `:Render()`.
 
-**Section header (most common use):**
 ```lua
-win:Label("Movement")
-win:Separator()
+tab:Label("Section Header")
+tab:Label("v1.0.0  |  github.com/you/rbximgui")
+tab:Label("Press Insert to hide this panel")
+tab:Label("──── Danger Zone ────────────────")
 ```
-
-**Version or credit line:**
-```lua
-win:Label("v1.2.0  |  github.com/you/rbximgui")
-```
-
-**Inline instructions:**
-```lua
-win:Label("Press Insert to hide this panel")
-```
-
-**Visual text divider:**
-```lua
-win:Label("──── Danger Zone ────────────────")
-```
-
-**Limitation:** Labels cannot be updated after `:Render()`. If you need a live value displayed (e.g. current health), you would need to store a reference to the underlying `TextLabel` instance and update its `.Text` manually, or rebuild the entire window.
 
 ---
 
 ### Separator Possibilities
 
-A separator is a purely visual 1px horizontal line. Its only job is to help the eye group widgets together.
+A 1px line. Best used after a Label to create a section header, or between groups of controls.
 
-**Classic: label + separator = section header:**
 ```lua
-win:Label("Combat")
-win:Separator()
-win:Toggle("Aimbot", false, cb)
-win:Toggle("Silent Aim", false, cb)
-```
+tab:Label("Combat"):Separator()
+tab:Toggle("Aimbot", false, cb)
 
-**Separator between two groups without a label:**
-```lua
-win:Button("Safe Action", cb)
-win:Button("Safe Action 2", cb)
-win:Separator()
-win:Button("Dangerous Action", cb)  -- visually separated for safety
-```
-
-**Double separator for a strong visual break:**
-```lua
-win:Separator()
-win:Label("Admin Only")
-win:Separator()
-win:Button("Shutdown Server", cb)
+-- Visual break between safe and dangerous actions
+tab:Button("Safe", cb)
+tab:Separator()
+tab:Button("Dangerous", cb)
 ```
 
 ---
 
 ### Button Possibilities
 
-Buttons are the most flexible widget — the callback is a plain Lua function and can do anything a LocalScript is allowed to do.
+The callback is a plain Lua function — it can do anything a LocalScript can do.
 
-**Teleportation:**
 ```lua
-win:Button("Go to Player", function()
-    local target = game.Players:FindFirstChild("TargetName")
-    if target and target.Character then
-        getRoot().CFrame = target.Character.HumanoidRootPart.CFrame
+-- Teleport to a specific player
+tab:Button("Go to Player", function()
+    local t = game.Players:FindFirstChild("TargetName")
+    if t and t.Character then
+        getRoot().CFrame = t.Character.HumanoidRootPart.CFrame
     end
 end)
-```
 
-**Spawning objects into the world:**
-```lua
-win:Button("Spawn Part", function()
-    local part     = Instance.new("Part")
-    part.Size      = Vector3.new(4, 4, 4)
-    part.Position  = getRoot().Position + Vector3.new(0, 5, 0)
-    part.Parent    = workspace
+-- Spawn a part at your feet
+tab:Button("Spawn Part", function()
+    local p = Instance.new("Part")
+    p.Size = Vector3.new(4,4,4)
+    p.Position = getRoot().Position + Vector3.new(0,5,0)
+    p.Parent = workspace
 end)
-```
 
-**Firing a RemoteEvent to the server:**
-```lua
-win:Button("Buy Sword", function()
+-- Fire a RemoteEvent to the server
+tab:Button("Buy Sword", function()
     game.ReplicatedStorage.ShopEvent:FireServer("Sword")
 end)
-```
 
-**Printing debug info to the output:**
-```lua
-win:Button("Dump Workspace", function()
-    for _, v in ipairs(workspace:GetChildren()) do
-        print(v.Name, v.ClassName)
-    end
-end)
-```
+-- Close the panel from inside
+tab:Button("Close", function() win:Hide() end)
 
-**Toggling another module on or off:**
-```lua
-local esp = require(script.Parent.EspModule)
-win:Button("Toggle ESP", function()
-    esp.toggle()
-end)
-```
-
-**Self-hiding the panel:**
-```lua
-win:Button("Close Panel", function()
-    win:Hide()
-end)
-```
-
-**Clipboard copy (in supported executors):**
-```lua
-win:Button("Copy UserId", function()
-    if setclipboard then
-        setclipboard(tostring(lp.UserId))
-    end
+-- Copy text to clipboard (supported executors only)
+tab:Button("Copy UserId", function()
+    if setclipboard then setclipboard(tostring(lp.UserId)) end
 end)
 ```
 
@@ -685,152 +689,97 @@ end)
 
 ### Toggle Possibilities
 
-Toggles are best for any behavior that is either running or not running over time — persistent loops, event listeners, overrides.
+Best for behaviors that run continuously over time — loops, event connections, persistent overrides.
 
-**Persistent loop behavior (noclip, effect that runs every frame):**
 ```lua
+-- Persistent loop (noclip, speed lock, etc.)
 local active = false
-win:Toggle("Noclip", false, function(on) active = on end)
-
-game:GetService("RunService").Stepped:Connect(function()
-    if active then
-        for _, p in ipairs(lp.Character:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
-        end
-    end
+tab:Toggle("Speed Lock", false, function(on) active = on end)
+RS.Stepped:Connect(function()
+    if active then getHum().WalkSpeed = 100 end
 end)
-```
 
-**Connecting and disconnecting an event listener:**
-```lua
+-- Connect/disconnect an event listener cleanly
 local conn
-win:Toggle("Auto-Farm", false, function(on)
+tab:Toggle("Auto Farm", false, function(on)
     if on then
         conn = workspace.Items.ChildAdded:Connect(function(item)
-            -- pick up / interact with item
+            -- collect item
         end)
     else
         if conn then conn:Disconnect() conn = nil end
     end
 end)
-```
 
-**Switching between two WalkSpeed modes:**
-```lua
-win:Toggle("Sprint", false, function(on)
-    local hum = getHum()
-    if hum then hum.WalkSpeed = on and 50 or 16 end
+-- Default ON (starts enabled)
+tab:Toggle("Show Nametags", true, function(on)
+    -- starts in the ON state
 end)
-```
 
-**Starting as ON by default:**
-```lua
--- Pass true as the second argument to start in the enabled state
-win:Toggle("Show Names", true, function(on)
-    -- runs immediately in the ON state when the window opens
-end)
-```
-
-**Two mutually exclusive toggles:**
-```lua
--- Since the library doesn't expose a setter, use flags to enforce exclusivity
-local isSilent, isAimbot = false, false
-
-win:Toggle("Aimbot", false, function(on)
-    isSilent = false  -- force the other off in your own logic
-    isAimbot = on
-end)
-win:Toggle("Silent Aim", false, function(on)
-    isAimbot = false
-    isSilent = on
-end)
+-- Two mutually exclusive modes
+local modeA, modeB = false, false
+tab:Toggle("Mode A", false, function(on) modeA = on; if on then modeB = false end end)
+tab:Toggle("Mode B", false, function(on) modeB = on; if on then modeA = false end end)
 ```
 
 ---
 
 ### Slider Possibilities
 
-Sliders work for any continuous numeric value — speed, size, transparency, color intensity, gravity, delay timers, and more.
+Any continuous numeric value.
 
-**Player movement stats:**
 ```lua
-win:Slider("Walk Speed",  0,   500, 16,  function(v) getHum().WalkSpeed = v end)
-win:Slider("Jump Power",  0,   500, 50,  function(v) getHum().JumpPower  = v end)
-win:Slider("Hip Height",  0,   10,  2,   function(v) getHum().HipHeight  = v end)
-```
+-- Player stats
+tab:Slider("Walk Speed",  0,   500, 16,  function(v) getHum().WalkSpeed = v end)
+tab:Slider("Jump Power",  0,   500, 50,  function(v) getHum().JumpPower  = v end)
+tab:Slider("Hip Height",  0,   10,  2,   function(v) getHum().HipHeight  = v end)
 
-**Camera control:**
-```lua
-win:Slider("FOV", 30, 120, 70, function(v)
-    workspace.CurrentCamera.FieldOfView = v
-end)
-```
+-- World
+tab:Slider("Gravity",     0,   400, 196, function(v) workspace.Gravity = v end)
+tab:Slider("Time of Day", 0,   24,  12,  function(v) game:GetService("Lighting").ClockTime = v end)
 
-**World gravity:**
-```lua
-win:Slider("Gravity", 0, 200, 196, function(v)
-    workspace.Gravity = v
-end)
-```
+-- Camera
+tab:Slider("FOV",         30,  120, 70,  function(v) workspace.CurrentCamera.FieldOfView = v end)
 
-**Lighting time of day:**
-```lua
-win:Slider("Time of Day", 0, 24, 12, function(v)
-    game:GetService("Lighting").TimeOfDay = string.format("%02d:00:00", v)
-end)
-```
+-- Transparency (for ESP boxes etc.)
+tab:Slider("Box Alpha",   0,   100, 80,  function(v) espBox.BackgroundTransparency = v / 100 end)
 
-**Part transparency (e.g. ESP boxes):**
-```lua
-win:Slider("Box Opacity", 0, 100, 80, function(v)
-    espBox.BackgroundTransparency = v / 100
-end)
-```
-
-**Auto-action repeat delay:**
-```lua
-local delay = 1
-win:Slider("Auto-Click Delay (s)", 1, 10, 1, function(v) delay = v end)
-```
-
-**Reading the value outside the callback** — sliders have no getter, so store the value yourself:
-```lua
-local speed = 16
-win:Slider("Speed", 0, 100, speed, function(v)
-    speed = v  -- always up to date
-end)
-
--- Anywhere else in your code, just read `speed` directly
-game:GetService("RunService").Heartbeat:Connect(function()
-    -- speed is always current here
-end)
+-- Track value externally (no getter — store it yourself)
+local mySpeed = 16
+tab:Slider("Speed", 0, 100, mySpeed, function(v) mySpeed = v end)
+-- read `mySpeed` anywhere in your code
 ```
 
 ---
 
 ## Theming
 
-All colors are defined in the `THEME` table near the top of `RobloxUI.lua`. Every key controls one visual element.
+Edit the `THEME` table at the top of `RobloxUI.lua`.
 
 | Key | Affects |
 |-----|---------|
 | `TitleBarBg` | Title bar background |
-| `TitleBarText` | Title text color |
-| `TitleBarAccent` | Left-edge blue stripe |
-| `WindowBg` | Main window background |
+| `TitleBarText` | Title text |
+| `TabBarBg` | Tab bar background |
+| `TabBg` | Inactive tab button background |
+| `TabHover` | Tab button on hover |
+| `TabActive` | Active (selected) tab background |
+| `TabText` | Inactive tab label color |
+| `TabTextActive` | Active tab label color |
+| `WindowBg` | Main content area background |
 | `WindowBorder` | Window outline |
 | `ButtonBg` | Button resting color |
-| `ButtonHover` | Button on mouse hover |
+| `ButtonHover` | Button on hover |
 | `ButtonActive` | Button while held |
-| `ButtonText` | Button label color |
+| `ButtonText` | Button label |
 | `ToggleOff` | Toggle track when off |
 | `ToggleOn` | Toggle track when on |
 | `ToggleKnob` | Toggle knob |
-| `ToggleText` | Toggle label color |
-| `SliderTrack` | Unfilled track color |
-| `SliderFill` | Filled portion of track |
+| `ToggleText` | Toggle label |
+| `SliderTrack` | Unfilled slider track |
+| `SliderFill` | Filled portion |
 | `SliderKnob` | Slider knob |
-| `SliderText` | Slider label color |
+| `SliderText` | Slider label |
 | `SliderValue` | Slider number readout |
 | `SeparatorColor` | Separator line |
 | `TextColor` | Label text |
@@ -840,101 +789,96 @@ All colors are defined in the `THEME` table near the top of `RobloxUI.lua`. Ever
 
 **Red accent theme:**
 ```lua
-TitleBarAccent  = Color3.fromRGB(220, 60,  60),
-ToggleOn        = Color3.fromRGB(220, 60,  60),
-ButtonActive    = Color3.fromRGB(220, 60,  60),
-SliderFill      = Color3.fromRGB(220, 60,  60),
+TabActive       = Color3.fromRGB(200, 50, 50),
+ButtonActive    = Color3.fromRGB(200, 50, 50),
+ToggleOn        = Color3.fromRGB(200, 50, 50),
+SliderFill      = Color3.fromRGB(200, 50, 50),
 SliderValue     = Color3.fromRGB(255, 100, 100),
-ResizeGripHover = Color3.fromRGB(220, 60,  60),
+ResizeGripHover = Color3.fromRGB(200, 50, 50),
 ```
 
 **Green hacker theme:**
 ```lua
-TitleBarBg      = Color3.fromRGB(10,  20,  10),
-TitleBarAccent  = Color3.fromRGB(0,   200, 80),
-TitleBarText    = Color3.fromRGB(80,  255, 140),
-WindowBg        = Color3.fromRGB(8,   14,  8),
-WindowBorder    = Color3.fromRGB(0,   80,  30),
-ButtonBg        = Color3.fromRGB(15,  40,  20),
-ButtonHover     = Color3.fromRGB(20,  60,  30),
-ButtonActive    = Color3.fromRGB(0,   200, 80),
-ToggleOn        = Color3.fromRGB(0,   200, 80),
-SliderFill      = Color3.fromRGB(0,   200, 80),
-SliderValue     = Color3.fromRGB(80,  255, 140),
-TextColor       = Color3.fromRGB(80,  255, 140),
-ToggleText      = Color3.fromRGB(80,  255, 140),
-SliderText      = Color3.fromRGB(80,  255, 140),
+TitleBarBg   = Color3.fromRGB(10,  20,  10),
+TitleBarText = Color3.fromRGB(80,  255, 140),
+TabBarBg     = Color3.fromRGB(12,  24,  12),
+TabBg        = Color3.fromRGB(15,  35,  15),
+TabActive    = Color3.fromRGB(0,   180, 70),
+TabText      = Color3.fromRGB(60,  160, 80),
+TabTextActive= Color3.fromRGB(200, 255, 200),
+WindowBg     = Color3.fromRGB(8,   14,  8),
+WindowBorder = Color3.fromRGB(0,   80,  30),
+ButtonBg     = Color3.fromRGB(15,  40,  20),
+ButtonHover  = Color3.fromRGB(20,  60,  30),
+ButtonActive = Color3.fromRGB(0,   180, 70),
+ToggleOn     = Color3.fromRGB(0,   180, 70),
+SliderFill   = Color3.fromRGB(0,   180, 70),
+SliderValue  = Color3.fromRGB(80,  255, 140),
+TextColor    = Color3.fromRGB(80,  255, 140),
+ToggleText   = Color3.fromRGB(80,  255, 140),
+SliderText   = Color3.fromRGB(80,  255, 140),
 ```
 
 ---
 
 ## Defaults
 
-Layout constants in the `DEFAULTS` table at the top of `RobloxUI.lua` control sizing and spacing globally.
-
 | Key | Default | Description |
 |-----|---------|-------------|
-| `WindowWidth` | `300` | Initial window width in pixels |
-| `WindowMinWidth` | `180` | Minimum width when resizing |
-| `WindowMinHeight` | `100` | Minimum height when resizing |
-| `TitleBarHeight` | `28` | Title bar height |
-| `Padding` | `10` | Content area inner padding (all sides) |
-| `ItemSpacing` | `6` | Vertical gap between widgets |
+| `WindowWidth` | `320` | Initial window width |
+| `WindowMinWidth` | `200` | Minimum width when resizing |
+| `WindowMinHeight` | `120` | Minimum height when resizing |
+| `TitleBarHeight` | `30` | Title bar height |
+| `TabBarHeight` | `30` | Tab bar height |
+| `TabMinWidth` | `60` | Minimum tab button width |
+| `Padding` | `10` | Content padding (all sides) |
+| `ItemSpacing` | `6` | Gap between widgets |
 | `ButtonHeight` | `28` | Button height |
 | `ToggleHeight` | `24` | Toggle row height |
 | `SliderHeight` | `30` | Slider track row height |
-| `CornerRadius` | `4` | Corner rounding on the window and buttons |
-| `FontSize` | `13` | Base font size for all text |
-| `ResizeGripSize` | `16` | Size of the resize grip square |
+| `CornerRadius` | `6` | Window and button corner rounding |
+| `FontSize` | `13` | Base font size |
+| `ResizeGripSize` | `14` | Resize grip square size |
 
 ---
 
 ## Rules & Gotchas
 
-**Always call `:Render()` last.** Widget methods only queue work — nothing is visible until `:Render()` runs.
+**Call `:AddTab()` before `:Tab()`.** `win:Tab("Name")` throws an error if that tab was never registered with `:AddTab("Name")`.
 
-**Call `:Render()` exactly once.** Calling it again duplicates every widget with no way to undo it.
+**Call `:Render()` last, exactly once.** Calling it again duplicates every widget across every tab.
 
-**LocalScript only.** The library uses `UserInputService` and creates GUI Instances. It cannot run in a server `Script`.
+**LocalScript only.** Uses `UserInputService` and creates GUI Instances. Cannot run in a server `Script`.
 
-**Sliders return integers.** The callback always receives `math.floor(value)`. If you need decimals you will need to modify the slider internals.
+**Sliders return integers.** The callback always receives `math.floor(value)`.
 
-**Widget state is internal.** There is no getter for a toggle's current state or a slider's current value from outside the window. Store state in your own variables via the callback:
+**Widget state is internal.** Store values in your own variables via the callback — there is no getter.
 
-```lua
-local mySpeed = 16
-win:Slider("Speed", 0, 100, mySpeed, function(v)
-    mySpeed = v  -- keep your own copy, readable anywhere
-end)
-```
+**Insert won't fire while chatting.** The listener checks `gameProcessed`.
 
-**Insert won't fire while chatting.** The listener checks `gameProcessed` so pressing `Insert` in Roblox's chat box does nothing.
-
-**HTTP must be on for loadstring.** Enable it under Game Settings → Security → Allow HTTP Requests before using `game:HttpGet`.
+**Tabs don't auto-scroll to the top on switch.** Each tab preserves its own scroll position between switches.
 
 ---
 
 ## Loading from GitHub
 
-Host `RobloxUI.lua` in a public repo and load it at runtime with no Studio setup required:
-
 ```lua
--- LocalScript
 local RbxImGui = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/RobloxUI.lua"
 ))()
 
 local win = RbxImGui.new("My Panel")
-win:Button("Test", function() print("works") end)
+win:AddTab("Main")
+win:Tab("Main"):Button("Test", function() print("works") end)
 win:Render()
 ```
 
 **Requirements:**
-- Game Settings → Security → **Allow HTTP Requests** must be ON
+- Game Settings → Security → **Allow HTTP Requests** ON
 - Repository must be **public**
-- URL must start with `https://raw.githubusercontent.com/` — not the regular GitHub page URL
+- Use the `raw.githubusercontent.com` URL
 
 **Getting the raw URL:**
 1. Open your file on GitHub
 2. Click **Raw** in the top-right of the file viewer
-3. Copy the URL from your browser address bar
+3. Copy the address bar URL
