@@ -5,8 +5,8 @@ A lightweight, ImGui-style UI library for Roblox. Create draggable, resizable wi
 > **Toggle visibility:** Press `Insert` at any time to show or hide the window.
 
 ---
-![Image #1](https://imgur.com/a/ndZ7tBN)
-![Image #2](https://imgur.com/a/6SpKdNO)
+![Image #1](https://i.imgur.com/hZnUQCI.png)
+![Image #2](https://i.imgur.com/a/6SpKdNO.png)
 ---
 
 ## Table of Contents
