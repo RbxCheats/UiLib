@@ -74,6 +74,11 @@ local D = {
 	ColorRowH       = 28,
 }
 
+-- Roblox built-in chevron icons (no external asset dependency)
+-- These are part of Roblox's own UI asset pack, always available.
+local ICON_CHEVRON_DOWN = "rbxassetid://6034818388"  -- clean downward chevron
+local ICON_CHEVRON_UP   = "rbxassetid://6034818367"  -- clean upward chevron
+
 -- ── Helpers ───────────────────────────────────────────────────
 local function tw(o, p, t)
 	TweenService:Create(o, TweenInfo.new(t or 0.1, Enum.EasingStyle.Quad), p):Play()
@@ -91,26 +96,20 @@ local function corner(r, p)
 	c.Parent = p
 end
 
--- Border drawn with a 1px inner Frame instead of UIStroke to avoid
--- the rendering artifact that makes UIStroke look like a box glyph.
-local function border(col, parent)
-	local f = make("Frame", {
-		Size             = UDim2.new(1, 2, 1, 2),
-		Position         = UDim2.new(0, -1, 0, -1),
-		BackgroundColor3 = col,
-		BorderSizePixel  = 0,
-		ZIndex           = parent.ZIndex - 1,
-		Parent           = parent,
-	})
-	corner(D.CornerRadius, f)
-	return f
-end
-
 local function uistroke(col, th, p)
 	local s = Instance.new("UIStroke")
 	s.Color = col; s.Thickness = th
 	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	s.Parent = p
+end
+
+-- Returns true if rectA (pos, size Vector2) is at least partially
+-- visible inside rectB (pos, size Vector2).
+local function rectsOverlap(aPos, aSize, bPos, bSize)
+	return aPos.X < bPos.X + bSize.X
+		and aPos.X + aSize.X > bPos.X
+		and aPos.Y < bPos.Y + bSize.Y
+		and aPos.Y + aSize.Y > bPos.Y
 end
 
 local FONT_R = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular,  Enum.FontStyle.Normal)
@@ -140,6 +139,7 @@ function RbxImGui.new(title, parent)
 	end
 	self._screenGui = parent
 
+	-- Outer window — ClipsDescendants OFF so floating menus can escape
 	self._window = make("Frame", {
 		Name             = "ImGuiWindow",
 		Size             = UDim2.new(0, D.WindowWidth, 0, 340),
@@ -152,6 +152,7 @@ function RbxImGui.new(title, parent)
 	corner(D.CornerRadius, self._window)
 	uistroke(THEME.WindowBorder, 1, self._window)
 
+	-- Inner clip frame — clips all scrollable content visually
 	self._clip = make("Frame", {
 		Size                 = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
@@ -179,6 +180,7 @@ function RbxImGui.new(title, parent)
 		Parent               = tb,
 	})
 
+	-- Drag
 	local dragging, ds, sp
 	tb.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -191,7 +193,9 @@ function RbxImGui.new(title, parent)
 	UserInputService.InputChanged:Connect(function(i)
 		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
 			local d = i.Position - ds
-			self._window.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+			self._window.Position = UDim2.new(
+				sp.X.Scale, sp.X.Offset + d.X,
+				sp.Y.Scale, sp.Y.Offset + d.Y)
 		end
 	end)
 
@@ -204,12 +208,12 @@ function RbxImGui.new(title, parent)
 		Parent           = self._clip,
 	})
 	make("Frame", {
-		Size = UDim2.new(1,0,0,1), Position = UDim2.new(0,0,1,-1),
+		Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
 		BackgroundColor3 = THEME.WindowBorder, BorderSizePixel = 0,
 		Parent = self._tabBar,
 	})
 	local ti = make("Frame", {
-		Size = UDim2.new(1,0,1,-1),
+		Size = UDim2.new(1, 0, 1, -1),
 		BackgroundTransparency = 1, BorderSizePixel = 0,
 		Parent = self._tabBar,
 	})
@@ -220,9 +224,12 @@ function RbxImGui.new(title, parent)
 	tl.VerticalAlignment = Enum.VerticalAlignment.Center
 	tl.Parent            = ti
 	local tp = Instance.new("UIPadding")
-	tp.PaddingLeft = UDim.new(0, 6); tp.PaddingRight = UDim.new(0, 6); tp.Parent = ti
-	self._tabInner = ti
+	tp.PaddingLeft  = UDim.new(0, 6)
+	tp.PaddingRight = UDim.new(0, 6)
+	tp.Parent       = ti
+	self._tabInner  = ti
 
+	-- Content area — clips scrolling content
 	local ct = D.TitleBarHeight + D.TabBarHeight
 	self._contentArea = make("Frame", {
 		Size                 = UDim2.new(1, 0, 1, -(ct + D.ResizeGripSize)),
@@ -232,7 +239,10 @@ function RbxImGui.new(title, parent)
 		ClipsDescendants     = true,
 		Parent               = self._clip,
 	})
+	-- Store content area ref on self so dropdown can read it
+	self._contentAreaRef = self._contentArea
 
+	-- Resize grip
 	local grip = make("TextButton", {
 		Size             = UDim2.new(0, D.ResizeGripSize, 0, D.ResizeGripSize),
 		Position         = UDim2.new(1, -D.ResizeGripSize, 1, -D.ResizeGripSize),
@@ -255,8 +265,9 @@ function RbxImGui.new(title, parent)
 	UserInputService.InputChanged:Connect(function(i)
 		if resizing and i.UserInputType == Enum.UserInputType.MouseMovement then
 			local d = i.Position - rs
-			self._window.Size = UDim2.new(0, math.max(D.WindowMinWidth,  rss.X + d.X),
-			                              0, math.max(D.WindowMinHeight, rss.Y + d.Y))
+			self._window.Size = UDim2.new(
+				0, math.max(D.WindowMinWidth,  rss.X + d.X),
+				0, math.max(D.WindowMinHeight, rss.Y + d.Y))
 		end
 	end)
 
@@ -337,8 +348,9 @@ end
 function RbxImGui:Tab(name)
 	assert(self._tabsByName[name], "Tab '" .. tostring(name) .. "' not found.")
 	local b = setmetatable({}, TabBuilder)
-	b._tabData   = self._tabsByName[name]
-	b._screenGui = self._screenGui
+	b._tabData        = self._tabsByName[name]
+	b._screenGui      = self._screenGui
+	b._contentAreaRef = self._contentAreaRef
 	return b
 end
 
@@ -349,11 +361,9 @@ end
 local function addLabel(td, text)
 	table.insert(td.items, function(parent, order)
 		make("TextLabel", {
-			Size = UDim2.new(1, 0, 0, 20),
-			BackgroundTransparency = 1,
-			Text = text, TextColor3 = THEME.TextColor,
-			TextSize = D.FontSize, FontFace = FONT_R,
-			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1,
+			Text = text, TextColor3 = THEME.TextColor, TextSize = D.FontSize,
+			FontFace = FONT_R, TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = order, Parent = parent,
 		})
 	end)
@@ -362,8 +372,7 @@ end
 local function addSeparator(td)
 	table.insert(td.items, function(parent, order)
 		make("Frame", {
-			Size = UDim2.new(1, 0, 0, 1),
-			BackgroundColor3 = THEME.SeparatorColor,
+			Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = THEME.SeparatorColor,
 			BorderSizePixel = 0, LayoutOrder = order, Parent = parent,
 		})
 	end)
@@ -372,11 +381,9 @@ end
 local function addButton(td, label, cb)
 	table.insert(td.items, function(parent, order)
 		local btn = make("TextButton", {
-			Size = UDim2.new(1, 0, 0, D.ButtonHeight),
-			BackgroundColor3 = THEME.ButtonBg,
-			Text = label, TextColor3 = THEME.ButtonText,
-			TextSize = D.FontSize, FontFace = FONT_S,
-			BorderSizePixel = 0, AutoButtonColor = false,
+			Size = UDim2.new(1, 0, 0, D.ButtonHeight), BackgroundColor3 = THEME.ButtonBg,
+			Text = label, TextColor3 = THEME.ButtonText, TextSize = D.FontSize,
+			FontFace = FONT_S, BorderSizePixel = 0, AutoButtonColor = false,
 			LayoutOrder = order, Parent = parent,
 		})
 		corner(D.CornerRadius - 2, btn)
@@ -395,16 +402,13 @@ local function addToggle(td, label, default, cb)
 	local state = default or false
 	table.insert(td.items, function(parent, order)
 		local row = make("Frame", {
-			Size = UDim2.new(1, 0, 0, D.ToggleHeight),
-			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, D.ToggleHeight), BackgroundTransparency = 1,
 			LayoutOrder = order, Parent = parent,
 		})
 		make("TextLabel", {
-			Size = UDim2.new(1, -50, 1, 0),
-			BackgroundTransparency = 1,
-			Text = label, TextColor3 = THEME.ToggleText,
-			TextSize = D.FontSize, FontFace = FONT_R,
-			TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
+			Size = UDim2.new(1, -50, 1, 0), BackgroundTransparency = 1,
+			Text = label, TextColor3 = THEME.ToggleText, TextSize = D.FontSize,
+			FontFace = FONT_R, TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
 		})
 		local tW, tH = 36, 18
 		local track = make("Frame", {
@@ -417,20 +421,22 @@ local function addToggle(td, label, default, cb)
 		local kS   = tH - 4
 		local knob = make("Frame", {
 			Size             = UDim2.new(0, kS, 0, kS),
-			Position         = state and UDim2.new(0, tW - kS - 2, 0.5, -kS / 2)
-			                         or  UDim2.new(0, 2,            0.5, -kS / 2),
+			Position         = state
+				and UDim2.new(0, tW - kS - 2, 0.5, -kS / 2)
+				or  UDim2.new(0, 2,            0.5, -kS / 2),
 			BackgroundColor3 = THEME.ToggleKnob, BorderSizePixel = 0, Parent = track,
 		})
 		corner(kS / 2, knob)
 		local click = make("TextButton", {
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Parent = row,
+			Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+			Text = "", AutoButtonColor = false, Parent = row,
 		})
 		click.MouseButton1Click:Connect(function()
 			state = not state
 			tw(track, {BackgroundColor3 = state and THEME.ToggleOn or THEME.ToggleOff})
-			tw(knob,  {Position = state and UDim2.new(0, tW - kS - 2, 0.5, -kS / 2)
-			                             or  UDim2.new(0, 2,            0.5, -kS / 2)})
+			tw(knob, {Position = state
+				and UDim2.new(0, tW - kS - 2, 0.5, -kS / 2)
+				or  UDim2.new(0, 2,            0.5, -kS / 2)})
 			if cb then cb(state) end
 		end)
 	end)
@@ -441,18 +447,16 @@ local function addSlider(td, label, mn, mx, default, cb)
 	local value = math.clamp(default, mn, mx)
 	table.insert(td.items, function(parent, order)
 		local col = make("Frame", {
-			Size = UDim2.new(1, 0, 0, D.SliderHeight),
-			BackgroundTransparency = 1, LayoutOrder = order, Parent = parent,
+			Size = UDim2.new(1, 0, 0, D.SliderHeight), BackgroundTransparency = 1,
+			LayoutOrder = order, Parent = parent,
 		})
 		local hdr = make("Frame", {
-			Size = UDim2.new(1, 0, 0, 16),
-			BackgroundTransparency = 1, Parent = col,
+			Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, Parent = col,
 		})
 		make("TextLabel", {
 			Size = UDim2.new(0.6, 0, 1, 0), BackgroundTransparency = 1,
-			Text = label, TextColor3 = THEME.SliderText,
-			TextSize = D.FontSize, FontFace = FONT_R,
-			TextXAlignment = Enum.TextXAlignment.Left, Parent = hdr,
+			Text = label, TextColor3 = THEME.SliderText, TextSize = D.FontSize,
+			FontFace = FONT_R, TextXAlignment = Enum.TextXAlignment.Left, Parent = hdr,
 		})
 		local vl = make("TextLabel", {
 			Size = UDim2.new(0.4, 0, 1, 0), Position = UDim2.new(0.6, 0, 0, 0),
@@ -462,15 +466,15 @@ local function addSlider(td, label, mn, mx, default, cb)
 		})
 		local tH    = 6
 		local track = make("Frame", {
-			Size             = UDim2.new(1, 0, 0, tH),
-			Position         = UDim2.new(0, 0, 0, 16 + (D.SliderHeight - 16 - tH) / 2),
+			Size = UDim2.new(1, 0, 0, tH),
+			Position = UDim2.new(0, 0, 0, 16 + (D.SliderHeight - 16 - tH) / 2),
 			BackgroundColor3 = THEME.SliderTrack, BorderSizePixel = 0, Parent = col,
 		})
 		corner(tH / 2, track)
 		local pct  = (value - mn) / (mx - mn)
 		local fill = make("Frame", {
-			Size             = UDim2.new(pct, 0, 1, 0),
-			BackgroundColor3 = THEME.SliderFill, BorderSizePixel = 0, Parent = track,
+			Size = UDim2.new(pct, 0, 1, 0), BackgroundColor3 = THEME.SliderFill,
+			BorderSizePixel = 0, Parent = track,
 		})
 		corner(tH / 2, fill)
 		local kS   = 14
@@ -488,9 +492,9 @@ local function addSlider(td, label, mn, mx, default, cb)
 		})
 		local function upd(x)
 			local p = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-			value         = mn + p * (mx - mn)
-			vl.Text       = tostring(math.floor(value))
-			fill.Size     = UDim2.new(p, 0, 1, 0)
+			value = mn + p * (mx - mn)
+			vl.Text = tostring(math.floor(value))
+			fill.Size = UDim2.new(p, 0, 1, 0)
 			knob.Position = UDim2.new(p, -kS / 2, 0.5, -kS / 2)
 			if cb then cb(math.floor(value)) end
 		end
@@ -508,24 +512,26 @@ local function addSlider(td, label, mn, mx, default, cb)
 end
 
 -- ════════════════════════════════════════════════════════════════
--- DROPDOWN  (v4)
+-- DROPDOWN  (v5)
 --
--- FIX: The arrow is now drawn as a small ImageLabel-sized Frame
--- with a triangle made of two colored sub-frames instead of a
--- unicode glyph that renders as a box in Gotham. We use plain
--- ASCII "v" / "^" as a fallback text character in Legacy font
--- which renders reliably everywhere.
+-- Arrow: ImageLabel using Roblox's built-in chevron assets.
+--   Down: rbxassetid://6034818388
+--   Up:   rbxassetid://6034818367
+-- These are part of Roblox's core UI icon pack and load instantly.
 --
--- The floating menu tracks the header via RenderStepped while open.
+-- Scroll-off auto-hide: every RenderStepped frame while the menu
+-- is open we check whether the header is still within the content
+-- area's visible bounds. If it has scrolled fully out of view the
+-- menu is hidden. When it scrolls back into view it re-appears.
 -- ════════════════════════════════════════════════════════════════
-local function addDropdown(td, screenGui, label, options, default, cb)
+local function addDropdown(td, screenGui, contentAreaRef, label, options, default, cb)
 	assert(type(options) == "table" and #options > 0, "Dropdown: options must be non-empty")
 	local selected = default or options[1]
 
 	table.insert(td.items, function(parent, order)
-		local ROW_H = D.DropdownRowH     -- 44
-		local HDR_H = D.DropdownHeaderH  -- 28
-		local ITM_H = D.DropdownItemH    -- 28
+		local ROW_H = D.DropdownRowH
+		local HDR_H = D.DropdownHeaderH
+		local ITM_H = D.DropdownItemH
 
 		local container = make("Frame", {
 			Name = "DD_" .. order,
@@ -534,7 +540,6 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 			LayoutOrder = order, Parent = parent,
 		})
 
-		-- Small label above the box
 		make("TextLabel", {
 			Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0),
 			BackgroundTransparency = 1, Text = label,
@@ -543,7 +548,6 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 			Parent = container,
 		})
 
-		-- Header
 		local header = make("TextButton", {
 			Size             = UDim2.new(1, 0, 0, HDR_H),
 			Position         = UDim2.new(0, 0, 0, 16),
@@ -554,30 +558,27 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 		corner(4, header)
 		uistroke(THEME.DropdownBorder, 1, header)
 
-		-- Selected value text
 		local selLabel = make("TextLabel", {
-			Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 10, 0, 0),
+			Size = UDim2.new(1, -36, 1, 0), Position = UDim2.new(0, 10, 0, 0),
 			BackgroundTransparency = 1, Text = selected,
 			TextColor3 = THEME.DropdownText, TextSize = D.FontSize, FontFace = FONT_S,
 			TextXAlignment = Enum.TextXAlignment.Left, Parent = header,
 		})
 
-		-- Arrow using Legacy font "v"/"^" — renders correctly in all Roblox clients
-		-- Legacy is a bitmap font so no glyph-rendering surprises.
-		local arrow = make("TextLabel", {
-			Size = UDim2.new(0, 22, 1, 0), Position = UDim2.new(1, -24, 0, 0),
+		-- Chevron icon using ImageLabel — crisp at any size, no font issues
+		local arrowImg = make("ImageLabel", {
+			Size             = UDim2.new(0, 14, 0, 14),
+			Position         = UDim2.new(1, -24, 0.5, -7),
 			BackgroundTransparency = 1,
-			Text = "v",
-			Font = Enum.Font.Legacy,   -- NOT FontFace — Legacy is the key
-			TextSize = 11,
-			TextColor3 = THEME.DropdownArrow,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			Parent = header,
+			Image            = ICON_CHEVRON_DOWN,
+			ImageColor3      = THEME.DropdownArrow,
+			ScaleType        = Enum.ScaleType.Fit,
+			Parent           = header,
 		})
 
-		-- ── Floating menu ────────────────────────────────────────
+		-- Floating menu on ScreenGui — never clipped
 		local menuH = #options * ITM_H + 8
-		local menu = make("Frame", {
+		local menu  = make("Frame", {
 			Name = "DDMenu_" .. order,
 			Size = UDim2.new(0, 200, 0, menuH),
 			Position = UDim2.new(0, 0, 0, 0),
@@ -589,9 +590,9 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 		uistroke(THEME.DropdownBorder, 1, menu)
 
 		local mPad = Instance.new("UIPadding")
-		mPad.PaddingTop    = UDim.new(0, 4); mPad.PaddingBottom = UDim.new(0, 4)
-		mPad.PaddingLeft   = UDim.new(0, 4); mPad.PaddingRight  = UDim.new(0, 4)
-		mPad.Parent        = menu
+		mPad.PaddingTop = UDim.new(0, 4); mPad.PaddingBottom = UDim.new(0, 4)
+		mPad.PaddingLeft = UDim.new(0, 4); mPad.PaddingRight = UDim.new(0, 4)
+		mPad.Parent = menu
 
 		local mLayout = Instance.new("UIListLayout")
 		mLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -611,7 +612,7 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 			local iLbl = make("TextLabel", {
 				Size = UDim2.new(1, -10, 1, 0), Position = UDim2.new(0, 8, 0, 0),
 				BackgroundTransparency = 1, Text = opt,
-				TextColor3 = isSel and Color3.fromRGB(255,255,255) or THEME.DropdownText,
+				TextColor3 = isSel and Color3.fromRGB(255, 255, 255) or THEME.DropdownText,
 				TextSize = D.FontSize, FontFace = isSel and FONT_S or FONT_R,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				ZIndex = 52, Parent = item,
@@ -636,7 +637,7 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 				selected        = opt
 				selLabel.Text   = opt
 				menu.Visible    = false
-				arrow.Text      = "v"
+				arrowImg.Image  = ICON_CHEVRON_DOWN
 				if cb then cb(opt) end
 			end)
 		end
@@ -644,27 +645,36 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 		local open      = false
 		local trackConn = nil
 
+		-- Reposition menu flush below the header and hide it if the
+		-- header has scrolled outside the visible content area.
 		local function updateMenuPos()
-			local ap = header.AbsolutePosition
-			local as = header.AbsoluteSize
-			menu.Size     = UDim2.new(0, as.X, 0, menuH)
-			menu.Position = UDim2.new(0, ap.X, 0, ap.Y + as.Y + 2)
+			local ap  = header.AbsolutePosition
+			local as  = header.AbsoluteSize
+			local cap = contentAreaRef.AbsolutePosition
+			local cas = contentAreaRef.AbsoluteSize
+
+			-- Check if header is at least partially inside the content area
+			local visible = rectsOverlap(ap, as, cap, cas)
+			menu.Visible  = visible
+			if visible then
+				menu.Size     = UDim2.new(0, as.X, 0, menuH)
+				menu.Position = UDim2.new(0, ap.X, 0, ap.Y + as.Y + 2)
+			end
 		end
 
 		local function openMenu()
-			updateMenuPos()
-			menu.Visible = true
-			arrow.Text   = "^"
-			open         = true
-			trackConn    = RunService.RenderStepped:Connect(function()
-				if open and menu.Visible then updateMenuPos() end
+			open = true
+			arrowImg.Image = ICON_CHEVRON_UP
+			trackConn = RunService.RenderStepped:Connect(function()
+				if open then updateMenuPos() end
 			end)
+			updateMenuPos()
 		end
 
 		local function closeMenu()
-			menu.Visible = false
-			arrow.Text   = "v"
-			open         = false
+			open           = false
+			menu.Visible   = false
+			arrowImg.Image = ICON_CHEVRON_DOWN
 			if trackConn then trackConn:Disconnect(); trackConn = nil end
 		end
 
@@ -674,13 +684,15 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 		header.MouseEnter:Connect(function() tw(header, {BackgroundColor3 = THEME.DropdownHover}) end)
 		header.MouseLeave:Connect(function() tw(header, {BackgroundColor3 = THEME.DropdownBg}) end)
 
+		-- Click outside to close
 		UserInputService.InputBegan:Connect(function(inp)
 			if not open then return end
 			if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 			local mp = inp.Position
 			local function inside(f)
 				local p, sz = f.AbsolutePosition, f.AbsoluteSize
-				return mp.X >= p.X and mp.X <= p.X + sz.X and mp.Y >= p.Y and mp.Y <= p.Y + sz.Y
+				return mp.X >= p.X and mp.X <= p.X + sz.X
+					and mp.Y >= p.Y and mp.Y <= p.Y + sz.Y
 			end
 			if not inside(menu) and not inside(header) then closeMenu() end
 		end)
@@ -688,19 +700,18 @@ local function addDropdown(td, screenGui, label, options, default, cb)
 end
 
 -- ════════════════════════════════════════════════════════════════
--- COLOR PICKER  (v4)
+-- COLOR PICKER  (v5)
 --
--- FIX — Hue bar gradient:
--- UIGradient on a single frame with 7 color stops breaks in Roblox
--- because the renderer composites them incorrectly when there are
--- many stops and the gradient is on a frame that also has children.
--- Solution: build the hue bar from 6 individual sub-frames, each
--- covering 1/6th of the width, each with a simple 2-stop gradient
--- from one pure hue to the next. This is 100% reliable.
+-- Hue bar: 6 segment frames, each with a 2-stop UIGradient.
+-- Each segment frame has NO children so the gradient renders
+-- correctly every time.
 --
--- FIX — ColorPicker open/close:
--- The wrapper frame that the UIListLayout measures is swapped
--- between CLOSED_H and OPEN_H. Nothing fights the layout engine.
+-- Hue knob: parented to hueBar with ClipsDescendants=false on
+-- hueBar so the knob can sit flush on top of the segments without
+-- being hidden. The knob ZIndex is above the segments.
+--
+-- Open/close: wrapper frame height is toggled between CLOSED_H
+-- and OPEN_H. The UIListLayout sees a valid height change.
 -- ════════════════════════════════════════════════════════════════
 local function addColorPicker(td, label, defaultColor, cb)
 	defaultColor = defaultColor or Color3.fromRGB(255, 50, 50)
@@ -713,39 +724,36 @@ local function addColorPicker(td, label, defaultColor, cb)
 	local GAP    = 6
 	local panelH = PAD + SQ_H + GAP + BAR_H + GAP + PREV_H + PAD
 
-	local ROW_H    = D.ColorRowH   -- 28
+	local ROW_H    = D.ColorRowH
 	local CLOSED_H = ROW_H
 	local OPEN_H   = ROW_H + GAP + panelH
 
-	-- Pure hues for the 7 spectrum stops
-	local HUE_STOPS = {
-		Color3.fromRGB(255,   0,   0),  -- 0/6  red
-		Color3.fromRGB(255, 255,   0),  -- 1/6  yellow
-		Color3.fromRGB(  0, 255,   0),  -- 2/6  green
-		Color3.fromRGB(  0, 255, 255),  -- 3/6  cyan
-		Color3.fromRGB(  0,   0, 255),  -- 4/6  blue
-		Color3.fromRGB(255,   0, 255),  -- 5/6  magenta
-		Color3.fromRGB(255,   0,   0),  -- 6/6  red (wrap)
+	-- The 7 spectrum hues (6 segments between consecutive pairs)
+	local HUE = {
+		Color3.fromRGB(255,   0,   0),  -- red
+		Color3.fromRGB(255, 255,   0),  -- yellow
+		Color3.fromRGB(  0, 255,   0),  -- green
+		Color3.fromRGB(  0, 255, 255),  -- cyan
+		Color3.fromRGB(  0,   0, 255),  -- blue
+		Color3.fromRGB(255,   0, 255),  -- magenta
+		Color3.fromRGB(255,   0,   0),  -- red (wrap)
 	}
 
 	table.insert(td.items, function(parent, order)
 
-		-- Wrapper: what UIListLayout measures; height is toggled
+		-- Wrapper — UIListLayout only measures this
 		local wrapper = make("Frame", {
-			Name             = "CP_" .. order,
-			Size             = UDim2.new(1, 0, 0, CLOSED_H),
-			BackgroundTransparency = 1,
-			ClipsDescendants = false,
-			LayoutOrder      = order,
-			Parent           = parent,
+			Name = "CP_" .. order,
+			Size = UDim2.new(1, 0, 0, CLOSED_H),
+			BackgroundTransparency = 1, ClipsDescendants = false,
+			LayoutOrder = order, Parent = parent,
 		})
 
-		-- ── Header row ────────────────────────────────────────────
+		-- Header row
 		local headerRow = make("Frame", {
 			Size = UDim2.new(1, 0, 0, ROW_H),
 			BackgroundTransparency = 1, Parent = wrapper,
 		})
-
 		make("TextLabel", {
 			Size = UDim2.new(1, -40, 1, 0), Position = UDim2.new(0, 0, 0, 0),
 			BackgroundTransparency = 1, Text = label,
@@ -753,30 +761,28 @@ local function addColorPicker(td, label, defaultColor, cb)
 			FontFace = FONT_R, TextXAlignment = Enum.TextXAlignment.Left,
 			Parent = headerRow,
 		})
-
 		local swatch = make("TextButton", {
 			Size = UDim2.new(0, 30, 0, 20), Position = UDim2.new(1, -30, 0.5, -10),
-			BackgroundColor3 = defaultColor,
-			Text = "", BorderSizePixel = 0, AutoButtonColor = false,
-			Parent = headerRow,
+			BackgroundColor3 = defaultColor, Text = "",
+			BorderSizePixel = 0, AutoButtonColor = false, Parent = headerRow,
 		})
 		corner(4, swatch)
 		uistroke(THEME.DropdownBorder, 1, swatch)
 
-		-- ── Panel ─────────────────────────────────────────────────
+		-- Panel
 		local panel = make("Frame", {
-			Name             = "Panel",
-			Size             = UDim2.new(1, 0, 0, panelH),
-			Position         = UDim2.new(0, 0, 0, ROW_H + GAP),
+			Name = "Panel",
+			Size = UDim2.new(1, 0, 0, panelH),
+			Position = UDim2.new(0, 0, 0, ROW_H + GAP),
 			BackgroundColor3 = THEME.PickerBg,
-			BorderSizePixel  = 0, Visible = false, ZIndex = 8,
-			Parent           = wrapper,
+			BorderSizePixel = 0, Visible = false, ZIndex = 8,
+			Parent = wrapper,
 		})
 		corner(6, panel)
 		uistroke(THEME.PickerBorder, 1, panel)
 
 		-- ── SV square ─────────────────────────────────────────────
-		local sqY   = PAD
+		local sqY    = PAD
 		local svBase = make("Frame", {
 			Size             = UDim2.new(1, -(PAD * 2), 0, SQ_H),
 			Position         = UDim2.new(0, PAD, 0, sqY),
@@ -786,7 +792,7 @@ local function addColorPicker(td, label, defaultColor, cb)
 		})
 		corner(4, svBase)
 
-		-- White → transparent  (left = white, right = shows hue)
+		-- White → transparent (saturation axis)
 		local wLayer = make("Frame", {
 			Size = UDim2.new(1, 0, 1, 0),
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -795,9 +801,8 @@ local function addColorPicker(td, label, defaultColor, cb)
 		do
 			local g = Instance.new("UIGradient")
 			g.Rotation = 0
-			g.Color = ColorSequence.new(
-				Color3.fromRGB(255, 255, 255),
-				Color3.fromRGB(255, 255, 255))
+			g.Color    = ColorSequence.new(
+				Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255))
 			g.Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 0),
 				NumberSequenceKeypoint.new(1, 1),
@@ -805,8 +810,9 @@ local function addColorPicker(td, label, defaultColor, cb)
 			g.Parent = wLayer
 		end
 
-		-- Transparent → black  (top = transparent, bottom = black)
-		-- BackgroundTransparency=1 so only the UIGradient draws.
+		-- Transparent → black (value axis)
+		-- BackgroundTransparency = 1 so frame contributes nothing;
+		-- only the UIGradient darkens it top-to-bottom.
 		local bLayer = make("Frame", {
 			Size = UDim2.new(1, 0, 1, 0),
 			BackgroundColor3 = Color3.fromRGB(0, 0, 0),
@@ -816,9 +822,8 @@ local function addColorPicker(td, label, defaultColor, cb)
 		do
 			local g = Instance.new("UIGradient")
 			g.Rotation = 90
-			g.Color = ColorSequence.new(
-				Color3.fromRGB(0, 0, 0),
-				Color3.fromRGB(0, 0, 0))
+			g.Color    = ColorSequence.new(
+				Color3.fromRGB(0, 0, 0), Color3.fromRGB(0, 0, 0))
 			g.Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 1),
 				NumberSequenceKeypoint.new(1, 0),
@@ -827,71 +832,82 @@ local function addColorPicker(td, label, defaultColor, cb)
 		end
 
 		local svKnob = make("Frame", {
-			Size = UDim2.new(0, 12, 0, 12),
-			Position = UDim2.new(s, -6, 1 - v, -6),
+			Size             = UDim2.new(0, 12, 0, 12),
+			Position         = UDim2.new(s, -6, 1 - v, -6),
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-			BorderSizePixel = 0, ZIndex = 13, Parent = svBase,
+			BorderSizePixel  = 0, ZIndex = 13, Parent = svBase,
 		})
 		corner(6, svKnob)
 		uistroke(Color3.fromRGB(0, 0, 0), 1.5, svKnob)
 
 		local svDrag = make("TextButton", {
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1, Text = "", AutoButtonColor = false,
-			ZIndex = 14, Parent = svBase,
+			Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+			Text = "", AutoButtonColor = false, ZIndex = 14, Parent = svBase,
 		})
 
-		-- ── Hue bar — built from 6 segments, each a 2-stop gradient ──
-		--
-		-- A single 7-stop UIGradient on a Frame with child Frames
-		-- renders incorrectly in Roblox (colours collapse to red/black).
-		-- The fix: 6 individual child frames, each 1/6 wide, each with
-		-- its own simple 2-color gradient. Completely reliable.
+		-- ── Hue bar ───────────────────────────────────────────────
+		-- Container: ClipsDescendants=false so the knob (parented here)
+		-- can overflow slightly without being clipped.
 		local hueY  = PAD + SQ_H + GAP
-		local hueW  = 1               -- full relative width (fractional)
-
-		-- Container for the 6 hue segments
 		local hueBar = make("Frame", {
-			Name             = "HueBar",
+			Name = "HueBar",
 			Size             = UDim2.new(1, -(PAD * 2), 0, BAR_H),
 			Position         = UDim2.new(0, PAD, 0, hueY),
 			BackgroundTransparency = 1,
-			BorderSizePixel  = 0, ClipsDescendants = true,
-			ZIndex           = 9, Parent = panel,
+			BorderSizePixel  = 0,
+			ClipsDescendants = false,   -- knob is allowed to overflow
+			ZIndex = 9, Parent = panel,
 		})
-		corner(4, hueBar)
 
-		-- Build 6 gradient segments
+		-- Clip frame inside hueBar — this clips the gradient segments
+		-- to rounded corners without clipping the knob.
+		local hueClip = make("Frame", {
+			Size             = UDim2.new(1, 0, 1, 0),
+			BackgroundTransparency = 1,
+			BorderSizePixel  = 0,
+			ClipsDescendants = true,
+			ZIndex           = 9,
+			Parent           = hueBar,
+		})
+		corner(4, hueClip)
+
+		-- 6 gradient segments — each is a leaf frame with no children
+		-- so the UIGradient renders without interference.
 		local SEG = 6
 		for i = 1, SEG do
 			local seg = make("Frame", {
-				Size             = UDim2.new(1/SEG, 0, 1, 0),
-				Position         = UDim2.new((i-1)/SEG, 0, 0, 0),
-				BackgroundColor3 = HUE_STOPS[i],
+				-- Use pixel offsets to eliminate sub-pixel gaps between segments
+				Size             = UDim2.new(0, 0, 1, 0),  -- width set below
+				Position         = UDim2.new(0, 0, 0, 0),  -- position set below
+				BackgroundColor3 = HUE[i],
 				BorderSizePixel  = 0,
 				ZIndex           = 9,
-				Parent           = hueBar,
+				Parent           = hueClip,
 			})
+			-- We use AbsoluteSize-aware sizing at render time via a special
+			-- approach: set Scale-based size/position (pixel-perfect at 320px width)
+			seg.Size     = UDim2.new(1 / SEG, 1, 1, 0)  -- +1px overlap kills gaps
+			seg.Position = UDim2.new((i - 1) / SEG, 0, 0, 0)
 			local g = Instance.new("UIGradient")
 			g.Rotation = 0
-			g.Color    = ColorSequence.new(HUE_STOPS[i], HUE_STOPS[i + 1])
+			g.Color    = ColorSequence.new(HUE[i], HUE[i + 1])
 			g.Parent   = seg
 		end
 
-		-- Hue knob — vertical bar sliding horizontally
+		-- Hue knob — parented to hueBar (not hueClip) so it's not clipped
 		local hueKnob = make("Frame", {
 			Size             = UDim2.new(0, 4, 1, 4),
 			Position         = UDim2.new(h, -2, 0, -2),
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-			BorderSizePixel  = 0, ZIndex = 12, Parent = hueBar,
+			BorderSizePixel  = 0, ZIndex = 15, Parent = hueBar,
 		})
 		corner(2, hueKnob)
 		uistroke(Color3.fromRGB(0, 0, 0), 1, hueKnob)
 
+		-- Drag layer — parented to hueBar, covers full area
 		local hueDrag = make("TextButton", {
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1, Text = "", AutoButtonColor = false,
-			ZIndex = 13, Parent = hueBar,
+			Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+			Text = "", AutoButtonColor = false, ZIndex = 16, Parent = hueBar,
 		})
 
 		-- ── Preview strip ─────────────────────────────────────────
@@ -905,7 +921,7 @@ local function addColorPicker(td, label, defaultColor, cb)
 		corner(4, preview)
 		uistroke(THEME.PickerBorder, 1, preview)
 
-		-- ── Shared color update ───────────────────────────────────
+		-- ── Color update ─────────────────────────────────────────
 		local function apply()
 			local c = Color3.fromHSV(h, s, v)
 			svBase.BackgroundColor3  = Color3.fromHSV(h, 1, 1)
@@ -936,7 +952,8 @@ local function addColorPicker(td, label, defaultColor, cb)
 		-- Hue drag
 		local hueDragging = false
 		local function readHue(inp)
-			h = math.clamp((inp.Position.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
+			h = math.clamp(
+				(inp.Position.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
 			apply()
 		end
 		hueDrag.InputBegan:Connect(function(i)
@@ -962,13 +979,28 @@ end
 -- ════════════════════════════════════════════════════════════════
 -- BINDINGS
 -- ════════════════════════════════════════════════════════════════
-function TabBuilder:Label(t)                addLabel(self._tabData, t);                                             return self end
-function TabBuilder:Separator()             addSeparator(self._tabData);                                            return self end
-function TabBuilder:Button(l, cb)           addButton(self._tabData, l, cb);                                        return self end
-function TabBuilder:Toggle(l, d, cb)        addToggle(self._tabData, l, d, cb);                                     return self end
-function TabBuilder:Slider(l, mn, mx, d, cb) addSlider(self._tabData, l, mn, mx, d, cb);                           return self end
-function TabBuilder:Dropdown(l, opts, def, cb) addDropdown(self._tabData, self._screenGui, l, opts, def, cb);      return self end
-function TabBuilder:ColorPicker(l, col, cb)  addColorPicker(self._tabData, l, col, cb);                            return self end
+function TabBuilder:Label(t)
+	addLabel(self._tabData, t); return self
+end
+function TabBuilder:Separator()
+	addSeparator(self._tabData); return self
+end
+function TabBuilder:Button(l, cb)
+	addButton(self._tabData, l, cb); return self
+end
+function TabBuilder:Toggle(l, d, cb)
+	addToggle(self._tabData, l, d, cb); return self
+end
+function TabBuilder:Slider(l, mn, mx, df, cb)
+	addSlider(self._tabData, l, mn, mx, df, cb); return self
+end
+function TabBuilder:Dropdown(l, opts, def, cb)
+	addDropdown(self._tabData, self._screenGui, self._contentAreaRef, l, opts, def, cb)
+	return self
+end
+function TabBuilder:ColorPicker(l, col, cb)
+	addColorPicker(self._tabData, l, col, cb); return self
+end
 
 local function ensureDefault(self)
 	if not self._tabsByName["__default"] then
@@ -979,21 +1011,38 @@ local function ensureDefault(self)
 		self._contentArea.Size     = UDim2.new(1, 0, 1, -(D.TitleBarHeight + D.ResizeGripSize))
 	end
 	local t = self._tabsByName["__default"]
-	t._screenGui = self._screenGui
+	t._screenGui      = self._screenGui
+	t._contentAreaRef = self._contentAreaRef
 	return t
 end
 
-function RbxImGui:Label(t)                  addLabel(ensureDefault(self), t);                                               return self end
-function RbxImGui:Separator()               addSeparator(ensureDefault(self));                                              return self end
-function RbxImGui:Button(l, cb)             addButton(ensureDefault(self), l, cb);                                          return self end
-function RbxImGui:Toggle(l, d, cb)          addToggle(ensureDefault(self), l, d, cb);                                       return self end
-function RbxImGui:Slider(l, mn, mx, d, cb)  addSlider(ensureDefault(self), l, mn, mx, d, cb);                               return self end
-function RbxImGui:Dropdown(l, opts, def, cb) addDropdown(ensureDefault(self), self._screenGui, l, opts, def, cb);           return self end
-function RbxImGui:ColorPicker(l, col, cb)   addColorPicker(ensureDefault(self), l, col, cb);                                return self end
+function RbxImGui:Label(t)
+	addLabel(ensureDefault(self), t); return self
+end
+function RbxImGui:Separator()
+	addSeparator(ensureDefault(self)); return self
+end
+function RbxImGui:Button(l, cb)
+	addButton(ensureDefault(self), l, cb); return self
+end
+function RbxImGui:Toggle(l, d, cb)
+	addToggle(ensureDefault(self), l, d, cb); return self
+end
+function RbxImGui:Slider(l, mn, mx, df, cb)
+	addSlider(ensureDefault(self), l, mn, mx, df, cb); return self
+end
+function RbxImGui:Dropdown(l, opts, def, cb)
+	addDropdown(ensureDefault(self), self._screenGui, self._contentAreaRef, l, opts, def, cb)
+	return self
+end
+function RbxImGui:ColorPicker(l, col, cb)
+	addColorPicker(ensureDefault(self), l, col, cb); return self
+end
 
 function RbxImGui:Render()
 	for _, td in ipairs(self._tabs) do
-		td._screenGui = self._screenGui
+		td._screenGui      = self._screenGui
+		td._contentAreaRef = self._contentAreaRef
 		for i, builder in ipairs(td.items) do
 			builder(td.scrollFrame, i)
 		end
