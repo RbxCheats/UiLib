@@ -699,7 +699,7 @@ local function addDropdown(td, overlayLayer, label, options, cb)
             Size                 = UDim2.new(0, 20, 1, 0),
             Position             = UDim2.new(1, -22, 0, 0),
             BackgroundTransparency = 1,
-            Text                 = "▾",
+            Text                 = "\/",
             TextColor3           = THEME.DropdownArrow,
             TextSize             = D.FontSize + 5,
             FontFace             = FB,
